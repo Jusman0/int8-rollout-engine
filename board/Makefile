@@ -30,9 +30,12 @@ LOADER   ?= $(OSS)/openFPGALoader
 IVERILOG ?= iverilog
 VVP      ?= vvp
 PYTHON   ?= python3
+# every recipe runs from the repo root (cd $(ROOT)), so a relative path such as
+# ../.venv/bin/python is made absolute here; a bare name like python3 stays as is
+PY       := $(if $(findstring /,$(PYTHON)),$(abspath $(PYTHON)),$(PYTHON))
 
 # the chip on the Tang Nano 20K, its family name in nextpnr and gowin_pack,
-# the clock in MHz (the board's 27 MHz crystal, no PLL) and openFPGALoader's
+# the clock in MHz (the board's 27 MHz oscillator U3, no PLL) and openFPGALoader's
 # name for the board. (Comments sit on their own lines: make would keep the
 # spaces before a trailing comment as part of the value.)
 DEVICE   = GW2AR-LV18QN88C8/I7
@@ -62,6 +65,9 @@ SUF   := $(if $(filter 1,$(SEED)),,_s$(SEED))
 FS    := $(BUILD)/engine_$(NAME)$(SUF).fs
 
 RTL   = $(ROOT)/rtl/rollout_lane.v $(ROOT)/rtl/rollout_engine.v
+# the weights and shifts the engine loads: new weights from golden.py must
+# rebuild the simulator and the netlist, or replay compares against stale ROMs
+ROM   = $(wildcard $(ROOT)/rom/*.hex) $(ROOT)/rom/params.vh
 BRD   = $(ROOT)/board/uart_rx.v $(ROOT)/board/uart_tx.v $(ROOT)/board/top.v
 # the same files, as the tools see them from the repo root
 SRCS  = rtl/rollout_lane.v rtl/rollout_engine.v board/uart_rx.v board/uart_tx.v board/top.v
@@ -76,13 +82,13 @@ sim: $(BUILD)/tb_top_l8 $(BUILD)/tb_top_l32
 	done
 	@echo "board testbench PASSED at LANES 8 and 32"
 
-$(BUILD)/tb_top_l%: tb_top.v $(BRD) $(RTL) $(ROOT)/sim/vectors.vh | $(BUILD)
+$(BUILD)/tb_top_l%: tb_top.v $(BRD) $(RTL) $(ROM) $(ROOT)/sim/vectors.vh | $(BUILD)
 	cd $(ROOT) && $(IVERILOG) -g2005 -Wall -I. -Isim -Ptb_top.LANES=$* \
 		-o board/build/tb_top_l$* $(SRCS) board/tb_top.v
 
 # the recorded decisions come from the golden model (top-level "make golden")
 $(ROOT)/sim/vectors.vh:
-	$(MAKE) -C $(ROOT) golden PYTHON=$(PYTHON)
+	$(MAKE) -C $(ROOT) golden PYTHON=$(PY)
 
 # ------------------------------------------------------------ bitstreams
 # 1. yosys: Verilog -> Gowin cells (LUT4, ALU, DFF, MULT9X9, ...)
@@ -92,7 +98,7 @@ $(ROOT)/sim/vectors.vh:
 # 4. gowin_pack: routed design -> .fs bitstream
 bit: $(FS)
 
-$(BUILD)/engine_$(NAME).json: $(BRD) $(RTL) | $(BUILD)
+$(BUILD)/engine_$(NAME).json: $(BRD) $(RTL) $(ROM) | $(BUILD)
 	cd $(ROOT) && $(YOSYS) -q -l board/build/yosys_$(NAME).log \
 		-p "read_verilog -I. $(SRCS); chparam -set LANES $(LANES) top; synth_gowin -family gw2a $(SYNTH_OPTS) -top top -json board/build/engine_$(NAME).json"
 
@@ -101,7 +107,7 @@ $(FS): $(BUILD)/engine_$(NAME).json tangnano20k.cst
 		--write board/build/pnr_$(NAME)_s$(SEED).json \
 		--device $(DEVICE) --vopt family=$(FAMILY) --vopt cst=board/tangnano20k.cst \
 		--freq $(FREQ) --seed $(SEED) --quiet --log board/build/pnr_$(NAME)_s$(SEED).log
-	cd $(ROOT) && $(PYTHON) board/check_pins.py board/build/pnr_$(NAME)_s$(SEED).json top
+	cd $(ROOT) && $(PY) board/check_pins.py board/build/pnr_$(NAME)_s$(SEED).json top
 	cd $(ROOT) && $(PACK) -c -d $(FAMILY) -o $@ board/build/pnr_$(NAME)_s$(SEED).json
 	@grep "Max frequency" $(BUILD)/pnr_$(NAME)_s$(SEED).log | tail -n 1
 
@@ -113,7 +119,7 @@ $(BUILD)/blinky.fs: blinky.v blinky.cst | $(BUILD)
 	cd $(ROOT) && $(NEXTPNR) --json board/build/blinky.json --write board/build/pnr_blinky.json \
 		--device $(DEVICE) --vopt family=$(FAMILY) --vopt cst=board/blinky.cst \
 		--freq $(FREQ) --quiet --log board/build/pnr_blinky.log
-	cd $(ROOT) && $(PYTHON) board/check_pins.py board/build/pnr_blinky.json blinky
+	cd $(ROOT) && $(PY) board/check_pins.py board/build/pnr_blinky.json blinky
 	cd $(ROOT) && $(PACK) -c -d $(FAMILY) -o $@ board/build/pnr_blinky.json
 
 # ------------------------------------------------------------ programming
@@ -130,11 +136,18 @@ flash: $(FS)
 	$(LOADER) -b $(BOARD) -f $<
 
 # ------------------------------------------------------------ host tests without a board
-host-fake:
-	cd $(ROOT) && $(PYTHON) board/host.py --fake ping
-	cd $(ROOT) && $(PYTHON) board/host.py --fake replay --n 50
-	cd $(ROOT) && $(PYTHON) board/host.py --fake loop --episodes 1
-	@echo "host.py fake-board tests PASSED"
+host-fake: | $(BUILD)
+	cd $(ROOT) && $(PY) board/host.py --fake ping
+	cd $(ROOT) && $(PY) board/host.py --fake replay --n 50
+	cd $(ROOT) && $(PY) board/host.py --fake loop --episodes 1
+	@# the abort path: a board that answers every 'D' with an error must make
+	@# replay stop after 5 errors, say so, count nothing as passing, and FAIL
+	cd $(ROOT) && ! $(PY) board/host.py --fake --fake-fail \
+		--log board/build/logs/abort_fake.log replay --n 4000
+	grep -q "stopped after 5 of 4000 decisions" $(BUILD)/logs/abort_fake.log
+	grep -q "decisions answered: 0/5 sent" $(BUILD)/logs/abort_fake.log
+	grep -q "^FAIL" $(BUILD)/logs/abort_fake.log
+	@echo "host.py fake-board tests PASSED (including the abort path)"
 
 # ------------------------------------------------------------ build reports
 # LANES 8 (seed 1, and the -noalu variant: the fallback if carry chains
