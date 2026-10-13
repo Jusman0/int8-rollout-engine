@@ -1,0 +1,16 @@
+$ python3 model/train_dynamics.py
+30000 transitions; input mean [0.0093117  0.03226455 0.00126464], std [2.2031991 3.3980262 0.5752989]
+target mean [0.0018739  0.00521344], std [0.17268294 0.53824705]
+epoch  10: training MSE (standardized units) 0.19599
+epoch  20: training MSE (standardized units) 0.15681
+epoch  30: training MSE (standardized units) 0.10137
+epoch  40: training MSE (standardized units) 0.01793
+epoch  50: training MSE (standardized units) 0.00362
+epoch  60: training MSE (standardized units) 0.00173
+largest layer-1 pre-activation on the training data: 6.4078
+training data: one-step RMS error  d_theta 0.00262 rad (0.107 LSB), d_omega 0.03056 rad/s (0.485 LSB)
+held-out data: one-step RMS error  d_theta 0.00264 rad (0.108 LSB), d_omega 0.03046 rad/s (0.484 LSB)
+wrote model/dynamics_fp32.npz
+real 1.37
+user 1.09
+sys 0.06

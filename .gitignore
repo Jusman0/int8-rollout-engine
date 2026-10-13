@@ -1,0 +1,6 @@
+# research notes, feasibility spikes: private, not published
+notes/
+sim/
+__pycache__/
+*.vcd
+.venv/
