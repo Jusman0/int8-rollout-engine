@@ -1,0 +1,40 @@
+board/top.v (rollout_engine LANES = 32, H = 15, UART wrapper) on the Tang Nano 20K
+(GW2AR-LV18QN88C8/I7), open-source flow: yosys synth_gowin -> nextpnr-himbaechel -> gowin_pack.
+Built with: cd board && make bit LANES=32 SEED=<seed>
+Summarized by: bash board/report.sh 32 "1 2"
+Tools: Yosys 0.69+286 (git sha1 37f25dae9, Release, Clang /usr/local/osxcross/target/bin/aarch64-apple-darwin25.5-clang++ 21.1.8)
+       "nextpnr-himbaechel" -- Next Generation Place and Route (Version nextpnr-0.11.1-59-g837d0eed)
+       apycula (gowin_pack) 0.35.dev2+g834c9e891
+
+These are the tools' estimates. Nothing here has run on the board yet.
+nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine
+(results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane
+multiplier. The board does not depend on them: it runs at 27 MHz from the crystal.
+
+seed 1: post-route Fmax 112.13 MHz; critical path 8.92 ns (4.36 ns logic, 4.55 ns routing)
+        slack at 27 MHz (37.04 ns period): +28.12 ns
+seed 2: post-route Fmax 106.30 MHz; critical path 9.41 ns (4.26 ns logic, 5.15 ns routing)
+        slack at 27 MHz (37.04 ns period): +27.63 ns
+
+nextpnr device utilisation (seed 1; placement does not change the cell counts), unused types left out:
+  VCC:       1/      1   100%
+  IOB:      14/    384     3%
+  LUT4:   15081/  20736    72%
+  MUX2_LUT5:    1000/  10368     9%
+  MUX2_LUT6:      37/   5184     0%
+  MUX2_LUT7:       5/   2592     0%
+  MUX2_LUT8:       1/   2592     0%
+  ALU:    5438/  15552    34%
+  GND:       1/      1   100%
+  DFF:    5927/  15552    38%
+  RAM16SDP4:     320/    648    49%
+  MULT9X9:      32/     96    33%
+  GSR:       1/      1   100%
+  BUFG:       1/     24     4%
+  LUT positions used (LUT4 + ALU, which share them): 20519 of 20736 (99%)
+
+Critical path, seed 1 (from nextpnr's post-route report). Names are yosys's: the
+part before the first _DFF/_LUT/_ALU/_MUX is the Verilog signal (u_eng. = inside the engine).
+  from u_eng.n_DFFE_Q_2_D_LUT2_F_I1_ALU_SUM_CIN_ALU_COUT_SUM_LUT2_I1_F_LUT3_I1_F_DFF_D_Q_DFF_Q.Q
+  to   best_idx_DFFE_Q_1.CE
+  31 logic stages; 4.36 ns logic, 4.55 ns routing

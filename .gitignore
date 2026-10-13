@@ -5,3 +5,4 @@ __pycache__/
 *.vcd
 .venv/
 .DS_Store
+board/build/

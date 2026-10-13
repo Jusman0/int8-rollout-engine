@@ -1,0 +1,78 @@
+board/top.v (rollout_engine LANES = 8, H = 15, UART wrapper) on the Tang Nano 20K
+(GW2AR-LV18QN88C8/I7), open-source flow: yosys synth_gowin -> nextpnr-himbaechel -> gowin_pack.
+Built with: cd board && make bit LANES=8 SEED=<seed>
+Summarized by: bash board/report.sh 8 "1"
+Tools: Yosys 0.69+286 (git sha1 37f25dae9, Release, Clang /usr/local/osxcross/target/bin/aarch64-apple-darwin25.5-clang++ 21.1.8)
+       "nextpnr-himbaechel" -- Next Generation Place and Route (Version nextpnr-0.11.1-59-g837d0eed)
+       apycula (gowin_pack) 0.35.dev2+g834c9e891
+
+These are the tools' estimates. Nothing here has run on the board yet.
+nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine
+(results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane
+multiplier. The board does not depend on them: it runs at 27 MHz from the crystal.
+
+seed 1: post-route Fmax 117.03 MHz; critical path 8.54 ns (4.11 ns logic, 4.44 ns routing)
+        slack at 27 MHz (37.04 ns period): +28.50 ns
+
+nextpnr device utilisation (seed 1; placement does not change the cell counts), unused types left out:
+  VCC:       1/      1   100%
+  IOB:      14/    384     3%
+  LUT4:    7695/  20736    37%
+  MUX2_LUT5:     737/  10368     7%
+  MUX2_LUT6:     107/   5184     2%
+  MUX2_LUT7:      36/   2592     1%
+  MUX2_LUT8:      11/   2592     0%
+  ALU:    1550/  15552     9%
+  GND:       1/      1   100%
+  DFF:    3913/  15552    25%
+  RAM16SDP4:     272/    648    41%
+  MULT9X9:       8/     96     8%
+  GSR:       1/      1   100%
+  BUFG:       1/     24     4%
+  LUT positions used (LUT4 + ALU, which share them): 9245 of 20736 (45%)
+
+Critical path, seed 1 (from nextpnr's post-route report). Names are yosys's: the
+part before the first _DFF/_LUT/_ALU/_MUX is the Verilog signal (u_eng. = inside the engine).
+  from u_eng.n_DFFE_Q_1_D_LUT2_F_I0_ALU_SUM_CIN_ALU_COUT_CIN_ALU_COUT_SUM_LUT2_I0_F_LUT3_I1_F_DFF_D_Q_DFF_Q.Q
+  to   best_idx_DFFE_Q_2.CE
+  21 logic stages; 4.11 ns logic, 4.44 ns routing
+
+--------
+
+board/top.v (rollout_engine LANES = 8, H = 15, UART wrapper) on the Tang Nano 20K
+(GW2AR-LV18QN88C8/I7), open-source flow: yosys synth_gowin -noalu -> nextpnr-himbaechel -> gowin_pack.
+Built with: cd board && make bit LANES=8 SEED=<seed> SYNTH_OPTS=-noalu
+Summarized by: bash board/report.sh 8 "1" -noalu
+Tools: Yosys 0.69+286 (git sha1 37f25dae9, Release, Clang /usr/local/osxcross/target/bin/aarch64-apple-darwin25.5-clang++ 21.1.8)
+       "nextpnr-himbaechel" -- Next Generation Place and Route (Version nextpnr-0.11.1-59-g837d0eed)
+       apycula (gowin_pack) 0.35.dev2+g834c9e891
+
+These are the tools' estimates. Nothing here has run on the board yet.
+nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine
+(results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane
+multiplier. The board does not depend on them: it runs at 27 MHz from the crystal.
+
+seed 1: post-route Fmax 91.63 MHz; critical path 10.91 ns (3.36 ns logic, 7.55 ns routing)
+        slack at 27 MHz (37.04 ns period): +26.13 ns
+
+nextpnr device utilisation (seed 1; placement does not change the cell counts), unused types left out:
+  VCC:       1/      1   100%
+  IOB:      14/    384     3%
+  LUT4:    8862/  20736    42%
+  MUX2_LUT5:    1596/  10368    15%
+  MUX2_LUT6:     360/   5184     6%
+  MUX2_LUT7:     145/   2592     5%
+  MUX2_LUT8:      39/   2592     1%
+  GND:       1/      1   100%
+  DFF:    3913/  15552    25%
+  RAM16SDP4:     272/    648    41%
+  MULT9X9:       8/     96     8%
+  GSR:       1/      1   100%
+  BUFG:       1/     24     4%
+  LUT positions used (LUT4 + ALU, which share them): 8862 of 20736 (43%)
+
+Critical path, seed 1 (from nextpnr's post-route report). Names are yosys's: the
+part before the first _DFF/_LUT/_ALU/_MUX is the Verilog signal (u_eng. = inside the engine).
+  from u_eng.cost_mem[26]_DFFE_Q_23.Q
+  to   best_cost_DFFE_Q_22.CE
+  12 logic stages; 3.36 ns logic, 7.55 ns routing
