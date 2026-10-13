@@ -39,3 +39,7 @@ Trace lane 0's first imagined step in decision 0 by hand, then check yourself ag
 8. **int8 vs float.** At H = 15 the int8 planner returned −146.6 and the float planner −147.2; the paired difference is +0.6 with a 95% CI of −7.7 to +9.6. What can you conclude, and what can't you? What happened at H = 5? What is one "seed" in that table?
 9. **Co-simulation vs replay.** `make test-full` already replays 4,000 decisions bit-exact. What does `make cosim` test that the replay can't? Why are the episode returns compared with float `==` and no tolerance?
 10. **What this does NOT show.** Name five things an interviewer might assume this project shows but it doesn't, and the evidence (or the missing evidence) for each.
+
+## 4. Stretch (not part of the gate)
+
+**Where does the area go?** The 32-lane build uses 13,804 LUT4s but only 33 DSP multipliers. Open [results/synth/stat_lanes32.txt](results/synth/stat_lanes32.txt) and account for the big items yourself: which registers and adders in `rtl/rollout_lane.v` become `CCU2C` carry chains, what `TRELLIS_DPR16X4` (LUT-based RAM) is storing, and how much comes from the operand multiplexers and the 32-entry result buffer. Compare with [stat_lanes8.txt](results/synth/stat_lanes8.txt): which parts scale with LANES and which don't? This is a likely interview follow-up to "33 multipliers."

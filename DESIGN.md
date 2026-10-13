@@ -148,7 +148,7 @@ dbg_n[4:0] → dbg_cost[23:0], dbg_theta[7:0], dbg_omega[7:0]   readback for ver
 
 1. **Golden model** (`model/golden.py`) implements §4–5 in pure-integer Python and runs closed-loop episodes. It
    writes `rom/*.hex`, `rom/params.vh`, and decision vectors (inputs, all 32 costs, final lane states, best index).
-2. **Bit-exact replay** (`make test`): the testbench feeds every recorded decision through the RTL and compares
+2. **Bit-exact replay** (`make test`): the testbench feeds recorded decisions (the first 1,000; `make test-full` runs all 4,000) through the RTL and compares
    all 32 costs, all 32 final states, and `best_idx`. It prints clocks per decision. A watchdog turns a hung FSM
    into a FAIL.
 3. **Closed-loop co-simulation** (`make cosim`): Python runs the pendulum physics and the host planner, and
@@ -238,7 +238,7 @@ and explained.*
   - **Hangs:** the host gives the simulator 60 s to connect and 60 s per tick (`SIGALRM`), then fails. The
     testbench keeps the 10,000-clock watchdog and stops with FAIL if the host's input is short or the pipe closes.
 - **Stage 3, planted-bug tests (2026-10-12).** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
-  Makefile were not touched. The unmodified RTL passes and all 9 planted bugs FAIL (`results/mutants.log`). These
+  Makefile were not touched. The unmodified RTL passes and all 9 planted bugs of that run FAILED (a 10th was added after review; `results/mutants.log` now holds the 10-bug run). These
   are the details §7.4 left open, and one deviation:
   - **Mutants:** §7.4's five, the dropped 21/32 weight on the ω cost, and three slips of my own: the step loop
     stops one imagined step early (fencepost), layer-2 dot products never restart from the bias (accumulator not
