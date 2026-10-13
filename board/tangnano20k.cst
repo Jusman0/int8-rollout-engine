@@ -1,0 +1,49 @@
+// Pin constraints for board/top.v on the Sipeed Tang Nano 20K
+// (GW2AR-LV18QN88C8/I7). The numbers are the FPGA's package pins, the same
+// numbers printed next to the header holes. Checked against Sipeed's
+// schematic Tang_Nano_20K_3921 (and 3923), Sipeed's example .cst files and
+// apicula's examples/tangnano20k.cst; see board/README.md.
+// All of these pins are in 3.3 V banks, hence LVCMOS33.
+
+// 27 MHz oscillator (U3 on the schematic)
+IO_LOC  "clk" 4;
+IO_PORT "clk" IO_TYPE=LVCMOS33 PULL_MODE=NONE;
+CLOCK_LOC "clk" BUFG;
+
+// S1 button: 330 ohms to 3.3 V when pressed, 1 kohm to ground otherwise,
+// so it reads 1 while pressed
+IO_LOC  "btn_rst" 88;
+IO_PORT "btn_rst" IO_TYPE=LVCMOS33 PULL_MODE=DOWN;
+
+// UART to the BL616 USB bridge. Named from the FPGA's side:
+// pin 69 is the FPGA's output (BL616 RX), pin 70 the FPGA's input (BL616 TX).
+IO_LOC  "uart_tx" 69;
+IO_PORT "uart_tx" IO_TYPE=LVCMOS33 PULL_MODE=NONE;
+IO_LOC  "uart_rx" 70;
+IO_PORT "uart_rx" IO_TYPE=LVCMOS33 PULL_MODE=UP;
+
+// The six orange LEDs, active low (anode to 3.3 V through 510 ohms)
+IO_LOC  "led_n[0]" 15;
+IO_PORT "led_n[0]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC  "led_n[1]" 16;
+IO_PORT "led_n[1]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC  "led_n[2]" 17;
+IO_PORT "led_n[2]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC  "led_n[3]" 18;
+IO_PORT "led_n[3]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC  "led_n[4]" 19;
+IO_PORT "led_n[4]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+IO_LOC  "led_n[5]" 20;
+IO_PORT "led_n[5]" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8;
+
+// Logic-analyzer probes on header pins that connect to nothing else on the
+// board (nets HSPI_DIN0..3 / HSPI_D0..3 in the schematic go only to the headers):
+//   pin 73 = J6 pin 1, pin 74 = J6 pin 2, pin 72 = J5 pin 17, pin 71 = J5 pin 18
+IO_LOC  "probe_busy" 73;
+IO_PORT "probe_busy" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8;
+IO_LOC  "probe_done" 74;
+IO_PORT "probe_done" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8;
+IO_LOC  "probe_rx" 72;
+IO_PORT "probe_rx" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8;
+IO_LOC  "probe_tx" 71;
+IO_PORT "probe_tx" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8;
