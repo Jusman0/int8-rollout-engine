@@ -1,5 +1,5 @@
 # Cycle sweep (DESIGN.md §7.5): command  PYTHON=python3 bash perf/sweep.sh
-# 2026-10-12 20:29:09, commit 43a549e, rtl/tb/model/rom/Makefile: no uncommitted changes
+# 2026-10-12 21:40:00, commit 56fb632, rtl/tb/model/rom/Makefile: no uncommitted changes
 # Icarus Verilog version 13.0 (stable) (v13_0); Python 3.14.0
 # 200 decisions per run (episode 0, seed 0). clocks per decision = the engine's cycles
 # output (start seen -> done raised), min..max over the run; the testbench checks it
@@ -7,15 +7,15 @@
 # (theta, omega) / best_idx and best_cost equal the golden model's.
 #
 #  LANES   H decisions    clocks/decis.    costs   states   best_idx verdict wall
-#     32  15       200      1281..1281  200/200  200/200    200/200    PASS   41s
-#     16  15       200      2528..2528  200/200  200/200    200/200    PASS   42s
-#      8  15       200      5022..5022  200/200  200/200    200/200    PASS   49s
-#     32   5       200        451..451  200/200  200/200    200/200    PASS   15s
-#     16   5       200        868..868  200/200  200/200    200/200    PASS   14s
-#      8   5       200      1702..1702  200/200  200/200    200/200    PASS   16s
+#     32  15       200      1281..1281  200/200  200/200    200/200    PASS   45s
+#     16  15       200      2528..2528  200/200  200/200    200/200    PASS   55s
+#      8  15       200      5022..5022  200/200  200/200    200/200    PASS   64s
+#     32   5       200        451..451  200/200  200/200    200/200    PASS   18s
+#     16   5       200        868..868  200/200  200/200    200/200    PASS   19s
+#      8   5       200      1702..1702  200/200  200/200    200/200    PASS   20s
 #
 # formula vs measured and multiplier use: results/cycles.log (perf/cycles.py)
-# total sweep time: 181 s
+# total sweep time: 223 s
 
 ################################################################
 # vectors: $PYTHON model/golden.py --H 15 --count 200 --out sim/perf/h15
@@ -59,7 +59,7 @@ Integer closed loop, seed 0, H = 15: 1 episodes, mean return -1.2
 wrote 200 decisions to sim/perf/h15/ (int_step and the loop version agree on the first 100)
 corner cases in these 200 decisions (96,000 lane-steps): h clamped at 127: 0, theta wraps: 0, omega saturations: 0, decisions with a tied best cost: 0
 observed |acc1| = 13,077, |acc2| = 3,415
-(2.1 s)
+(1.0 s)
 ################################################################
 # vectors: $PYTHON model/golden.py --H 5 --count 200 --out sim/perf/h5
 Integer model (DESIGN.md §4.1):
@@ -102,9 +102,9 @@ Integer closed loop, seed 0, H = 5: 1 episodes, mean return -0.9
 wrote 200 decisions to sim/perf/h5/ (int_step and the loop version agree on the first 100)
 corner cases in these 200 decisions (32,000 lane-steps): h clamped at 127: 0, theta wraps: 0, omega saturations: 0, decisions with a tied best cost: 25
 observed |acc1| = 10,020, |acc2| = 964
-(0.7 s)
+(0.4 s)
 ################################################################
-# run LANES=32 H=15: make test LANES=32 VEC=sim/perf/h15 N=200  (41 s)
+# run LANES=32 H=15: make test LANES=32 VEC=sim/perf/h15 N=200  (45 s)
 iverilog -g2005 -Wall -I. -Isim/perf/h15 -DVEC_DIR='"sim/perf/h15"' -Ptb_rollout_engine.LANES=32 \
 		-o sim/perf/h15/tb_rollout_engine_l32 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/perf/h15/tb_rollout_engine_l32 +n=200 | tee sim/perf/h15/tb_l32.log
@@ -120,10 +120,10 @@ best_idx: 200/200 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 200/200)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 3534022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 3534022000 (1ps)
 ALL TESTS PASSED
 ################################################################
-# run LANES=16 H=15: make test LANES=16 VEC=sim/perf/h15 N=200  (42 s)
+# run LANES=16 H=15: make test LANES=16 VEC=sim/perf/h15 N=200  (55 s)
 iverilog -g2005 -Wall -I. -Isim/perf/h15 -DVEC_DIR='"sim/perf/h15"' -Ptb_rollout_engine.LANES=16 \
 		-o sim/perf/h15/tb_rollout_engine_l16 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/perf/h15/tb_rollout_engine_l16 +n=200 | tee sim/perf/h15/tb_l16.log
@@ -139,10 +139,10 @@ best_idx: 200/200 decisions match (best_cost too)
 clocks per decision: 2528..2528 (cycles output matches the testbench count on 200/200)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 6028022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 6028022000 (1ps)
 ALL TESTS PASSED
 ################################################################
-# run LANES=8 H=15: make test LANES=8 VEC=sim/perf/h15 N=200  (49 s)
+# run LANES=8 H=15: make test LANES=8 VEC=sim/perf/h15 N=200  (64 s)
 iverilog -g2005 -Wall -I. -Isim/perf/h15 -DVEC_DIR='"sim/perf/h15"' -Ptb_rollout_engine.LANES=8 \
 		-o sim/perf/h15/tb_rollout_engine_l8 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/perf/h15/tb_rollout_engine_l8 +n=200 | tee sim/perf/h15/tb_l8.log
@@ -158,10 +158,10 @@ best_idx: 200/200 decisions match (best_cost too)
 clocks per decision: 5022..5022 (cycles output matches the testbench count on 200/200)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 11016022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 11016022000 (1ps)
 ALL TESTS PASSED
 ################################################################
-# run LANES=32 H=5: make test LANES=32 VEC=sim/perf/h5 N=200  (15 s)
+# run LANES=32 H=5: make test LANES=32 VEC=sim/perf/h5 N=200  (18 s)
 iverilog -g2005 -Wall -I. -Isim/perf/h5 -DVEC_DIR='"sim/perf/h5"' -Ptb_rollout_engine.LANES=32 \
 		-o sim/perf/h5/tb_rollout_engine_l32 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/perf/h5/tb_rollout_engine_l32 +n=200 | tee sim/perf/h5/tb_l32.log
@@ -177,10 +177,10 @@ best_idx: 200/200 decisions match (best_cost too)
 clocks per decision: 451..451 (cycles output matches the testbench count on 200/200)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 1234022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 1234022000 (1ps)
 ALL TESTS PASSED
 ################################################################
-# run LANES=16 H=5: make test LANES=16 VEC=sim/perf/h5 N=200  (14 s)
+# run LANES=16 H=5: make test LANES=16 VEC=sim/perf/h5 N=200  (19 s)
 iverilog -g2005 -Wall -I. -Isim/perf/h5 -DVEC_DIR='"sim/perf/h5"' -Ptb_rollout_engine.LANES=16 \
 		-o sim/perf/h5/tb_rollout_engine_l16 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/perf/h5/tb_rollout_engine_l16 +n=200 | tee sim/perf/h5/tb_l16.log
@@ -196,10 +196,10 @@ best_idx: 200/200 decisions match (best_cost too)
 clocks per decision: 868..868 (cycles output matches the testbench count on 200/200)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 2068022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 2068022000 (1ps)
 ALL TESTS PASSED
 ################################################################
-# run LANES=8 H=5: make test LANES=8 VEC=sim/perf/h5 N=200  (16 s)
+# run LANES=8 H=5: make test LANES=8 VEC=sim/perf/h5 N=200  (20 s)
 iverilog -g2005 -Wall -I. -Isim/perf/h5 -DVEC_DIR='"sim/perf/h5"' -Ptb_rollout_engine.LANES=8 \
 		-o sim/perf/h5/tb_rollout_engine_l8 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/perf/h5/tb_rollout_engine_l8 +n=200 | tee sim/perf/h5/tb_l8.log
@@ -215,5 +215,5 @@ best_idx: 200/200 decisions match (best_cost too)
 clocks per decision: 1702..1702 (cycles output matches the testbench count on 200/200)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 3736022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 3736022000 (1ps)
 ALL TESTS PASSED

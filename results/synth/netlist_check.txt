@@ -1,0 +1,16 @@
+# Does the RTL edited after the place-and-route runs still synthesize to the same netlist?
+# The nextpnr logs in results/synth/ were made from rtl/ as of commit 43a549e, which did not change
+# through df95962. After that, only comments and simulation-only checks (between synthesis
+# translate_off/translate_on) were added to rtl/. If Yosys builds a netlist identical to df95962's,
+# the place-and-route results still apply and do not need to be re-run.
+# Run 2026-10-12 21:33:27 from the repo root, Yosys 0.69 (git sha1 9f75ca1f9), YoWASP build
+# Old RTL: git show df95962:rtl/<file> > $OLD/<file>.   New RTL: the working tree (rtl/), committed as 56fb632.
+# For each lane count L and each version:
+#   yosys -q -p 'read_verilog -I. <rtl files>; chparam -set LANES L rollout_engine;
+#                synth_ecp5 -top rollout_engine; write_verilog -noattr net_<version>_L.v'
+# -noattr leaves out the src attributes, whose line numbers moved. Then cmp compares the netlists.
+
+LANES = 32: old netlist 8453745 bytes, new 8453745 bytes
+  cmp: identical
+LANES = 8: old netlist 3163529 bytes, new 3163529 bytes
+  cmp: identical

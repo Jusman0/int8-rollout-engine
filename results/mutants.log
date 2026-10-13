@@ -1,8 +1,8 @@
 # Planted-bug (mutation) tests, DESIGN.md §7.4. Everything below the "command:" line is the complete
-# output of that command (stdout; then the wall time from /usr/bin/time -p). The notes in this header
-# were written after the run.
+# output of that command (stdout; its progress messages on stderr, "picking ..." and "running ...", are
+# left out; then the wall time from /usr/bin/time -p). The notes in this header were written after the run.
 #
-# Result: the unmodified RTL PASSES on both vector sets; all 9 planted bugs FAIL on the corner set.
+# Result: the unmodified RTL PASSES on both vector sets; all 10 planted bugs FAIL on the corner set.
 #
 # Notes:
 # - Why two vector sets. On the first 300 recorded decisions, 3 mutants PASS: 02 (omega wraps),
@@ -25,6 +25,13 @@
 #   fail in all 300. 07 also runs 83 fewer clocks per decision (1198, not 1281), but the clock
 #   check compares the engine's cycles output with the testbench's count of the same clocks, so
 #   that check cannot see it.
+# - 10 (the lanes read the live theta0/omega0 ports instead of the copies made at start) was added after
+#   review, together with the testbench change that catches it: while busy is high, the testbench now
+#   drives theta0/omega0 to the bitwise inverse of the measured state. With the inputs held steady (the
+#   testbench before that change) the bug computes the same numbers as the correct design; a scratch
+#   run of the old testbench on 20 decisions, not committed, passed it.
+# - The machine was running the other re-runs at the same time (load average above 20), so the wall
+#   time below is longer than a run alone would take.
 # - Every mutant compiled with iverilog -g2005 -Wall without a warning (no compiler output below).
 # - The harness itself was checked in a scratch copy of the repo (not committed): a sed script that
 #   matches nothing is reported "not applied", a copy that does not compile "compile error" (both
@@ -34,8 +41,8 @@
 ################################################################
 # command: PYTHON=<venv python> bash mutants/run_mutants.sh   (what "make mutants" runs, see mutants/run_mutants.sh)
 # Planted-bug tests (DESIGN.md §7.4): bash mutants/run_mutants.sh
-# started 2026-10-12 20:31:32, Icarus Verilog version 13.0 (stable) (v13_0)
-# rtl/ and tb/ from commit 43a549e (0 uncommitted changes), N = 300 decisions per run, LANES = 32
+# started 2026-10-12 21:36:22, Icarus Verilog version 13.0 (stable) (v13_0)
+# rtl/ and tb/ from commit 56fb632 (0 uncommitted changes), N = 300 decisions per run, LANES = 32
 
 Vector sets (corner cases replayed through the golden model):
   recorded vectors (sim/, H = 15), all 4000 decisions: h clamped at 127 in 32 (133 times), theta wraps in 272 (8052 times), omega saturates in 20 (228 times), tied best cost in 27
@@ -59,10 +66,11 @@ mutant               | what it models                                           
 07_one_step_short    | off-by-one in the step loop: imagines H-1 steps, not H             | FAIL 300/300/298   | FAIL 300/300/300  
 08_l2_no_bias        | layer-2 dot products never restart from the bias                   | FAIL 300/300/300   | FAIL 300/300/300  
 09_omega_wb_late     | omega' written back one clock late: its cost uses the OLD omega    | FAIL 300/0/269     | FAIL 300/0/273    
+10_live_state_inputs | lanes read the live theta0/omega0 ports, not the copies made at start | FAIL 300/300/299   | FAIL 300/300/299  
 
-first 300 decisions:  6 of 9 mutants caught
-corner 300 decisions: 9 of 9 mutants caught
-wall time: 294 s (4 simulations at a time)
+first 300 decisions:  7 of 10 mutants caught
+corner 300 decisions: 10 of 10 mutants caught
+wall time: 456 s (4 simulations at a time)
 ALL MUTANTS CAUGHT
 
 ################################################################
@@ -83,7 +91,7 @@ best_idx: 300/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
 decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
@@ -97,12 +105,12 @@ best_idx: 300/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 01_theta_saturates: theta saturates at +-127 instead of wrapping
 -- change (diff rtl/ mutated):
-134c134
+135c135
 <             theta <= theta + d_theta[7:0];
 ---
 >             theta <= (theta + d_theta > 127) ? 8'sd127 : (theta + d_theta < -127) ? -8'sd127 : theta + d_theta[7:0];
@@ -128,7 +136,7 @@ best_idx: 291/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
 decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
@@ -151,12 +159,12 @@ best_idx: 262/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 02_omega_wraps: omega wraps (keeps the low 8 bits) instead of saturating
 -- change (diff rtl/ mutated):
-137,138c137
+138,139c138
 <             omega <= (omega_sum >  127) ?  8'sd127 :
 <                      (omega_sum < -127) ? -8'sd127 : omega_sum[7:0];
 ---
@@ -174,7 +182,7 @@ best_idx: 300/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
 decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
@@ -197,12 +205,12 @@ best_idx: 296/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 03_argmin_last_tie: argmin compares with <=, so a tie picks the LAST index
 -- change (diff rtl/ mutated):
-280c280
+296c296
 <                     if (n == 5'd0 || cost_mem[n] < best_cost) begin
 ---
 >                     if (n == 5'd0 || cost_mem[n] <= best_cost) begin
@@ -219,7 +227,7 @@ best_idx: 300/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
 decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
@@ -236,12 +244,12 @@ best_idx: 273/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 04_logical_shift: logical >> instead of arithmetic >>> in requantization
 -- change (diff rtl/ mutated):
-110,112c110,112
+111,113c111,113
 <     wire signed [ACC_W-1:0] acc_s1  = acc >>> S1;
 <     wire signed [ACC_W-1:0] d_theta = acc >>> S2_0;
 <     wire signed [ACC_W-1:0] d_omega = acc >>> S2_1;
@@ -271,7 +279,7 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0 lane 0: cost 253209, golden 6272
 decision 0 lane 0: (theta, omega) = (66, 127), golden (-30, -37)
@@ -294,12 +302,12 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 05_h_clamp_255: hidden values clamp at 255 instead of 127
 -- change (diff rtl/ mutated):
-116c116
+117c117
 <                        (acc_s1 > 127)  ? 8'd127 : acc_s1[7:0];
 ---
 >                        (acc_s1 > 255)  ? 8'd255 : acc_s1[7:0];
@@ -316,7 +324,7 @@ best_idx: 300/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
 decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
@@ -339,12 +347,12 @@ best_idx: 293/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 06_no_omega_weight: omega cost term is omega'^2, the 21/32 weight dropped
 -- change (diff rtl/ mutated):
-101c101
+102c102
 <             SRC_OMEGA: term = ((sq20 << 4) + (sq20 << 2) + sq20) >> 5;
 ---
 >             SRC_OMEGA: term = sq20[15:0];
@@ -367,7 +375,7 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0 lane 0: cost 7893, golden 6272
 decision 0: best 30 (cost 536), golden 30 (cost 397)
@@ -387,12 +395,12 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 07_one_step_short: off-by-one in the step loop: imagines H-1 steps, not H
 -- change (diff rtl/ mutated):
-266c266
+282c282
 <                         if (t == H - 1) state <= S_STORE;
 ---
 >                         if (t == H - 2) state <= S_STORE;
@@ -418,7 +426,7 @@ best_idx: 2/300 decisions match (best_cost too)
 clocks per decision: 1198..1198 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5052022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5052022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0 lane 0: cost 4469, golden 6272
 decision 0 lane 0: (theta, omega) = (-25, -35), golden (-30, -37)
@@ -441,12 +449,12 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1198..1198 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5052022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5052022000 (1ps)
 
 ================================================================
 == 08_l2_no_bias: layer-2 dot products never restart from the bias
 -- change (diff rtl/ mutated):
-182c182
+198c198
 <         ex_first <= iss_l1 ? (i == 2'd0) : (j == 4'd0);
 ---
 >         ex_first <= iss_l1 ? (i == 2'd0) : 1'b0;
@@ -472,7 +480,7 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0 lane 0: cost 217480, golden 6272
 decision 0 lane 0: (theta, omega) = (-89, 124), golden (-30, -37)
@@ -495,12 +503,12 @@ best_idx: 0/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 
 ================================================================
 == 09_omega_wb_late: omega' written back one clock late: its cost uses the OLD omega
 -- change (diff rtl/ mutated):
-175c175
+191c191
 <             ex_rq_omega <= iss_l2 && (i == 2'd1) && (j == N_HID - 1); // d_omega's 16th MAC
 ---
 >             ex_rq_omega <= (state == S_COST) && (i == 2'd0);        // 1st COST beat
@@ -523,7 +531,7 @@ best_idx: 31/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
 -- testbench, corner 300 decisions:
 decision 0 lane 0: cost 5439, golden 6272
 decision 0: best 30 (cost 446), golden 30 (cost 397)
@@ -543,8 +551,61 @@ best_idx: 27/300 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
 busy/done protocol errors: 0
 FAIL
-tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
-real 294.05
-user 1051.78
-sys 9.67
-exit status: 0
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
+
+================================================================
+== 10_live_state_inputs: lanes read the live theta0/omega0 ports, not the copies made at start
+-- change (diff rtl/ mutated):
+221c221
+<                 .init(ex_init), .theta0(theta0_r), .omega0(omega0_r),
+---
+>                 .init(ex_init), .theta0(theta0), .omega0(omega0),
+-- testbench, first 300 decisions:
+decision 0 lane 0: cost 13354, golden 6272
+decision 0 lane 0: (theta, omega) = (-42, -54), golden (-30, -37)
+decision 0: best 14 (cost 248), golden 30 (cost 397)
+decision 0: state (-7, 10), best 14, cost 248, 1281 clocks
+decision 1 lane 0: cost 4793, golden 367
+decision 1 lane 0: (theta, omega) = (-24, -40), golden (-4, -10)
+decision 1: best 26 (cost 254), golden 1 (cost 323)
+decision 1: state (-6, 11), best 26, cost 254, 1281 clocks
+decision 2 lane 0: cost 50359, golden 218
+decision 2 lane 0: (theta, omega) = (-83, -112), golden (-1, -8)
+decision 2: best 6 (cost 9614), golden 0 (cost 218)
+decision 2: state (-4, 13), best 6, cost 9614, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 1/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0 lane 0: cost 13354, golden 6272
+decision 0 lane 0: (theta, omega) = (-42, -54), golden (-30, -37)
+decision 0: best 14 (cost 248), golden 30 (cost 397)
+decision 0: state (-7, 10), best 14, cost 248, 1281 clocks
+decision 1 lane 0: cost 4793, golden 367
+decision 1 lane 0: (theta, omega) = (-24, -40), golden (-4, -10)
+decision 1: best 26 (cost 254), golden 1 (cost 323)
+decision 1: state (-6, 11), best 26, cost 254, 1281 clocks
+decision 2 lane 0: cost 50359, golden 218
+decision 2 lane 0: (theta, omega) = (-83, -112), golden (-1, -8)
+decision 2: best 6 (cost 9614), golden 0 (cost 218)
+decision 2: state (-4, 13), best 6, cost 9614, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 1/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:200: $finish called at 5301022000 (1ps)
+real 455.69
+user 1146.03
+sys 7.20

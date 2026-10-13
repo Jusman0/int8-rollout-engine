@@ -1,12 +1,14 @@
 # Closed-loop co-simulation (DESIGN.md §7.3). Each block below is one command's complete output
 # (the report, the simulator's own output, wall time from /usr/bin/time -p). The machine was running other
-# simulations at the same time (load average about 9), so wall times are slower than a run alone.
+# simulations at the same time (load average above 20 for part of the run), so wall times are slower than a
+# run alone.
 #
 # Summary: 20/20 episode returns identical (float ==) to the golden model's integer-planner closed loop,
 # 4000/4000 RTL choices equal golden's, 1281 clocks per decision; LANES = 8 (1 episode) also identical.
+# Re-run after review at commit 56fb632; no "rollout_engine: ERROR" line (the act_we-while-busy check) appears.
 
 ################################################################
-# command: PYTHON=<venv python> bash cosim/run.sh   (what 'make cosim' runs; started 2026-10-12 20:22:12, Icarus Verilog version 13.0 (stable) (v13_0), Python 3.14.0, NumPy 2.5.4, gymnasium 1.4.0)
+# command: PYTHON=<venv python> bash cosim/run.sh   (what 'make cosim' runs; started 2026-10-12 21:36:22, Icarus Verilog version 13.0 (stable) (v13_0), Python 3.14.0, NumPy 2.5.4, gymnasium 1.4.0)
 Closed-loop co-simulation (DESIGN.md §7.3): gymnasium Pendulum-v1, seed 0, H = 15, 20 episodes x 200 ticks
 RTL: rollout_engine (LANES = 32) in Icarus Verilog, through named pipes; its best_idx picks every applied action
 golden: model/golden.py integer planner; both use the host code in model/planner.py
@@ -39,21 +41,20 @@ RTL chosen best_idx equal to the golden closed loop's: 4000/4000
 episode returns identical (float ==): 20/20
 mean return: RTL -126.1, golden -126.1
 clocks per decision (RTL cycles output): 1281..1281
-wall time: RTL closed loop 739.0 s (184.8 ms per decision), golden closed loop 1.4 s
+wall time: RTL closed loop 770.7 s (192.7 ms per decision), golden closed loop 2.5 s
 PASS
 --- simulator output (vvp) ---
 tb_cosim: answered 4000 ticks (LANES = 32, H = 15); the host sent 0, done
 cosim/tb_cosim.v:180: $finish called at 70520020000 (1ps)
-real 740.64
-user 656.65
-sys 5.18
-run.sh exit status: 0
+real 773.46
+user 635.51
+sys 3.05
 ################################################################
 # command: grep -E ' (MATCH|MISMATCH) ' sim/cosim/cosim.log | awk '{print $1, $2}' | diff - <(grep -v '^#' sim/returns.txt) && echo ...
-# The RTL returns above against sim/returns.txt, which model/golden.py wrote (2026-10-12 19:34, seed 0, H = 15) when it made the replay vectors.
+# The RTL returns above against sim/returns.txt, which model/golden.py wrote (2026-10-12 21:34, seed 0, H = 15) when it made the replay vectors.
 no differences: all 20 RTL episode returns equal the ones model/golden.py recorded, digit for digit
 ################################################################
-# command: EPISODES=1 LANES=8 PYTHON=<venv python> bash cosim/run.sh   (started 2026-10-12 20:35:11; a quick check that the LANES knob works: 8 lanes, 4 passes per decision)
+# command: EPISODES=1 LANES=8 PYTHON=<venv python> bash cosim/run.sh   (started 2026-10-12 21:49:16; a quick check that the LANES knob works: 8 lanes, 4 passes per decision)
 Closed-loop co-simulation (DESIGN.md §7.3): gymnasium Pendulum-v1, seed 0, H = 15, 1 episodes x 200 ticks
 RTL: rollout_engine (LANES = 8) in Icarus Verilog, through named pipes; its best_idx picks every applied action
 golden: model/golden.py integer planner; both use the host code in model/planner.py
@@ -67,12 +68,11 @@ RTL chosen best_idx equal to the golden closed loop's: 200/200
 episode returns identical (float ==): 1/1
 mean return: RTL -1.2, golden -1.2
 clocks per decision (RTL cycles output): 5022..5022
-wall time: RTL closed loop 43.3 s (216.4 ms per decision), golden closed loop 0.1 s
+wall time: RTL closed loop 31.2 s (156.1 ms per decision), golden closed loop 0.1 s
 PASS
 --- simulator output (vvp) ---
 tb_cosim: answered 200 ticks (LANES = 8, H = 15); the host sent 0, done
 cosim/tb_cosim.v:180: $finish called at 11008020000 (1ps)
-real 43.90
-user 39.36
-sys 0.46
-run.sh exit status: 0
+real 31.66
+user 31.19
+sys 0.21

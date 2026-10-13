@@ -1,0 +1,17 @@
+# The machine and tools behind the logs in results/ (recorded 2026-10-12 21:40:31, the day the logs were made).
+# Each $ line is a command; the lines under it are its output.
+$ sysctl -n machdep.cpu.brand_string
+Apple M2
+$ sysctl -n hw.ncpu
+8
+$ sysctl -n hw.memsize
+8589934592
+$ sw_vers -productVersion
+15.1
+$ uname -m
+arm64
+$ iverilog -V 2>/dev/null | head -n 1
+Icarus Verilog version 13.0 (stable) (v13_0)
+$ python3 -c 'import sys, numpy, gymnasium; print(sys.version.split()[0], numpy.__version__, gymnasium.__version__)'   (the virtualenv python)
+3.14.0 2.5.4 1.4.0
+# Synthesis tools: results/synth/tool_versions.txt

@@ -1,0 +1,101 @@
+33 objects.
+ex_mac_TRELLIS_FF_Q_DI_LUT4_D_1_Z_CCU2C_S1_B1_MULT18X18D_P5
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_engine.v:202.37-202.42|/share/mul2dsp.v:80.6-84.5|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[0].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[30].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[16].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[31].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[1].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[11].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[13].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[10].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[26].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[9].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[8].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[7].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[17].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[6].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[21].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[5].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[27].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[12].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[22].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[23].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[20].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[15].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[24].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[2].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[18].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[25].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[3].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[19].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[28].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[14].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[4].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+gen_lane[29].lane.prod_MULT18X18D_P9
+  (* module_not_derived=00000000000000000000000000000001 *)
+  (* src="rtl/rollout_lane.v:80.32-80.44|/share/mul2dsp.v:255.6-259.5|/share/lattice/dsp_map_18x18.v:9.13-16.3" *)
+

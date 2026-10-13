@@ -1,5 +1,5 @@
 ################################################################
-# command: make test   (started 2026-10-12 19:58:22, Icarus Verilog version 13.0 (stable) (v13_0))
+# command: make test   (started 2026-10-12 21:36:22, Icarus Verilog version 13.0 (stable) (v13_0))
 iverilog -g2005 -Wall -I. -Isim -DVEC_DIR='"sim"' -Ptb_rollout_engine.LANES=32 \
 		-o sim/tb_rollout_engine_l32 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
 vvp -n sim/tb_rollout_engine_l32 +n=1000 | tee sim/tb_l32.log
@@ -15,9 +15,9 @@ best_idx: 1000/1000 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 1000/1000)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 17670022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 17670022000 (1ps)
 ALL TESTS PASSED
-real 140.13
-user 135.21
-sys 0.80
+real 273.47
+user 172.35
+sys 0.83
 

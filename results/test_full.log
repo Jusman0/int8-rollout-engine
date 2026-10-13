@@ -1,5 +1,5 @@
 ################################################################
-# command: make test-full   (started 2026-10-12 20:00:42, Icarus Verilog version 13.0 (stable) (v13_0))
+# command: make test-full   (started 2026-10-12 21:40:56, Icarus Verilog version 13.0 (stable) (v13_0))
 /Library/Developer/CommandLineTools/usr/bin/make test N=4000
 vvp -n sim/tb_rollout_engine_l32 +n=4000 | tee sim/tb_l32.log
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
@@ -14,9 +14,9 @@ best_idx: 4000/4000 decisions match (best_cost too)
 clocks per decision: 1281..1281 (cycles output matches the testbench count on 4000/4000)
 busy/done protocol errors: 0
 PASS
-tb/tb_rollout_engine.v:185: $finish called at 70680022000 (1ps)
+tb/tb_rollout_engine.v:200: $finish called at 70680022000 (1ps)
 ALL TESTS PASSED
-real 679.01
-user 609.81
-sys 5.56
+real 624.60
+user 585.28
+sys 2.50
 

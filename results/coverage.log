@@ -1,0 +1,14 @@
+# Which corner cases do the decisions that make test and make test-full replay contain?
+# make test replays the first 1,000 recorded decisions in sim/, make test-full all 4,000.
+# pick_corner_vectors.py replays every recorded decision through the integer golden model and
+# counts the corner cases. (It also writes a picked set to --out, which is not used here; it
+# goes to sim/, which is not committed.) Its "first 1000" line is the make test set.
+################################################################
+# command: python3 mutants/pick_corner_vectors.py --n 1000 --out sim/cov1000   (2026-10-12 21:34:56, Python 3.14.0)
+recorded vectors (sim/, H = 15), all 4000 decisions: h clamped at 127 in 32 (133 times), theta wraps in 272 (8052 times), omega saturates in 20 (228 times), tied best cost in 27
+first 1000 (sim/ as recorded): 1000 decisions: h clamped at 127 in 0 (0 times), theta wraps in 21 (672 times), omega saturates in 0 (0 times), tied best cost in 6
+corner 1000 (sim/cov1000/): 1000 decisions: h clamped at 127 in 32 (133 times), theta wraps in 60 (1711 times), omega saturates in 20 (228 times), tied best cost in 27
+  = all 71 decisions with an h clamp, an omega saturation or a tie, plus the first 929 others (decisions 0..3955)
+real 2.40
+user 2.30
+sys 0.03

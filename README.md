@@ -6,7 +6,7 @@ A 32-lane int8 Verilog engine that, every control tick, imagines 32 possible fut
 
 ## Results
 
-Every result here comes from a log in [`results/`](results/), and the command next to it makes that log again. Runs: Apple M2, Icarus Verilog 13.0, Python 3.14, NumPy 2.5.4, gymnasium 1.4.0. (The DreamZero and GR00T figures further down come from the sources linked there, not from this repo.)
+Every result here comes from a log in [`results/`](results/), and the command next to it reproduces the numbers in that log (the logs also carry notes and wall times added when they were made). Runs: Apple M2, Icarus Verilog 13.0, Python 3.14, NumPy 2.5.4, gymnasium 1.4.0 ([`machine.txt`](results/machine.txt)). The DreamZero and GR00T figures further down come from the sources linked there, not from this repo.
 
 | Result | Log | Reproduce |
 |---|---|---|
@@ -15,9 +15,9 @@ Every result here comes from a log in [`results/`](results/), and the command ne
 | **Closed loop, the RTL in charge**: the RTL picks every action of 20 pendulum episodes. **20 / 20** episode returns identical to the golden model's (float `==`), **4,000 / 4,000** choices the same | [`cosim.log`](results/cosim.log) | `make cosim` |
 | **Clocks per decision**: **1,281** at 32 lanes, H = 15. All 6 configurations (below) equal (32 / LANES)·(83·H + 2) + 34 exactly | [`sweep.log`](results/sweep.log), [`cycles.log`](results/cycles.log) | `make sweep` |
 | **int8 vs float planner**: no measurable difference at H = 15, **+0.6** return (95% CI −7.7 to +9.6, 100 episodes). At H = 5, int8 is worse by 142 | [`planner_quality.txt`](results/planner_quality.txt) | `python3 model/golden.py --eval` |
-| **Planted bugs**: **9 / 9** caught on the corner-case decisions (only 6 / 9 on the first 300 decisions, see below) | [`mutants.log`](results/mutants.log) | `make mutants` |
-| **ECP5-45F, 32 lanes**: 13,804 LUT4s before packing (31%), 33 of 72 DSP multipliers. **47.49 MHz** post-route estimate, out-of-context, median of 3 seeds, so it **misses** its 50 MHz target | [`synth/summary.txt`](results/synth/summary.txt) | `make timing` |
-| The learned model's one-step error on held-out data: 0.108 LSB in θ, 0.484 LSB in ω | [`train_dynamics.log`](results/train_dynamics.log) | `python3 model/train_dynamics.py` |
+| **Planted bugs**: **10 / 10** caught on the corner-case decisions (only 7 / 10 on the first 300 decisions, see below) | [`mutants.log`](results/mutants.log) | `make mutants` |
+| **ECP5-45F, 32 lanes**: 13,804 LUT4s before packing (31%), 33 of 72 DSP multipliers (one per lane, plus one for a ROM address, see below). **47.49 MHz** post-route estimate, out-of-context, median of 3 seeds, so it **misses** its 50 MHz target | [`synth/summary.txt`](results/synth/summary.txt) | `make timing` |
+| The learned model's one-step RMS error on held-out data: 0.108 LSB in θ, 0.484 LSB in ω | [`train_dynamics.log`](results/train_dynamics.log) | `python3 model/train_dynamics.py` |
 
 ### Clocks per decision
 
@@ -63,24 +63,27 @@ From [`results/mutants.log`](results/mutants.log) (`make mutants`). Each bug is 
 | the step loop stops one imagined step early | caught | caught |
 | layer 2's accumulator never restarts from the bias | caught | caught |
 | ω′ written back one clock late, so its cost squares the old ω | caught | caught |
+| the lanes read the θ0, ω0 input ports during the decision, not the copies made at `start` | caught | caught |
 
-The three misses aren't harmless bugs. The first 300 decisions never saturate ω, never clamp a hidden value and never have two candidates tied for the lowest cost, so those bugs compute exactly what the correct design computes on that data. The corner-case set takes all 71 of the 4,000 recorded decisions that hit one of those cases, plus the earliest others, and catches all nine. Two bugs (the missing 21/32 and the late ω′) leave every final state right; only the cost check sees them, which is why the testbench checks costs and states separately.
+The three misses aren't harmless bugs. The first 300 decisions never saturate ω, never clamp a hidden value and never have two candidates tied for the lowest cost, so those bugs compute exactly what the correct design computes on that data. The corner-case set takes all 71 of the 4,000 recorded decisions that hit one of those cases, plus the earliest others, and catches all ten. Two bugs (the missing 21/32 and the late ω′) leave every final state right: only the cost check, and the best_cost comparison, see them; the state check can't. That is why the testbench checks costs and states separately. The last bug is caught only because the testbench changes θ0 and ω0 while the engine is busy: with the inputs held steady, reading the ports gives the same numbers as reading the copies.
 
 ### Synthesis
 
-From [`results/synth/`](results/synth/) (`make timing YOSYS=... NEXTPNR=...`; Yosys 0.69, nextpnr-ecp5 0.11.1, LFE5U-45F). All MHz and µs figures are **post-route estimates, out-of-context** (no pin constraints), from the median of 3 placement seeds. Nothing has been run on a board.
+From [`results/synth/`](results/synth/) (`make timing YOSYS=... NEXTPNR=...`; Yosys 0.69, nextpnr-ecp5 0.11.1, LFE5U-45F). All MHz and µs figures are **post-route estimates, out-of-context** (no pin constraints), from the median of 3 placement seeds. Nothing has been run on a board. Since these runs the RTL has only gained comments and simulation-only checks, and Yosys still builds the identical netlist ([`netlist_check.txt`](results/synth/netlist_check.txt)).
 
 | | 32 lanes | 8 lanes |
 |---|---|---|
 | LUT4s (before packing) | 13,804 of 43,848 (31%) | 6,338 (14%) |
-| DSP multipliers (MULT18X18D) | 33 of 72: one per lane, plus one | 9 of 72 |
+| DSP multipliers (MULT18X18D) | 33 of 72: one per lane, plus one (below) | 9 of 72 |
 | Flip-flops | 3,751 | 2,025 |
 | Post-route Fmax, seeds 1 / 2 / 3 | 47.49 / 48.94 / 47.26 MHz | 53.53 / 51.54 / 51.20 MHz |
 | Median vs the 50 MHz target | **47.49 MHz, misses on every seed** | 51.54 MHz, meets on every seed |
 | Clocks per decision (H = 15) | 1,281 | 5,022 |
-| One decision at the median Fmax | 27.0 µs | 97.4 µs |
+| One decision at the median Fmax, start to done (not counting the 480 clocks of action loading) | 27.0 µs | 97.4 µs |
 
-In all six runs the slowest path is the same single clock: a broadcast control register → the operand multiplexer → the lane's multiplier → the 21/32 shift-and-add → the 24-bit cost adder. About 60% of it is routing (8.4 ns of logic, 12.1 to 12.8 ns of routing at 32 lanes), because one register fans out to all 32 lanes. Registering the product before the cost add is the obvious next step (about one extra clock per pass); I haven't tried it, so I don't know what it gains.
+In all six runs the slowest path is the same single clock: a broadcast register (`ex_src` or `ex_j`) → the hidden-value read and the operand multiplexer → the lane's DSP multiplier → the 21/32 shift-and-add → the 24-bit cost adder. Its logic delay is 8.4 ns in every run, 3.93 ns of it the multiplier. The rest is routing: 12.1 to 12.8 ns at 32 lanes (about 60% of the path) and 10.3 to 11.1 ns at 8 lanes (55 to 57%). The hop out of the broadcast register is only part of that routing, 1.04 to 3.62 ns at 32 lanes and 1.15 to 2.25 ns at 8 lanes; the rest is spread over the other hops of the path. So these logs don't show that fanning one register out to 32 lanes is what makes the path slow. Finding out would take another run, for example with a copy of the broadcast register for each group of lanes. Registering the product before the cost add is the obvious next step (about one extra clock per pass); I haven't tried it, so I don't know what it gains. (All figures: the "Critical path report for clock" section of each `nextpnr_*.log`.)
+
+The 33rd DSP multiplier isn't in a lane. Yosys built it for `3 * j`, the W1 ROM address `3 * j + i` in `rtl/rollout_engine.v` ([`dsp_cells_lanes32.txt`](results/synth/dsp_cells_lanes32.txt), `make synth`). Multiplying a 4-bit counter by 3 only needs a shift and an add (`2j + j`); I've left the RTL as it is, so the numbers above stay the ones that were placed and routed.
 
 ## How it works
 
@@ -125,7 +128,7 @@ cost += θ'² + ((21·ω'²) >> 5) + (u² >> 11)                                
 | DONE | 1 | |
 | **Total** | **1,281** | measured per state in [`results/test.log`](results/test.log) |
 
-**No requantization multiplier.** A typical int8 layer rescales with `acc · M >> shift`, which would need a second multiplier in every lane (tiny-tensor-core uses a 24×17 one). Here every scale factor is folded into the integer weights offline, and each layer's scale is rounded to a power of two, so requantizing is just add bias, arithmetic shift, clamp. The bias also carries +2^(S−1), which turns the floor shift into round-half-up for free. The write-back happens in the clock after a dot product's last MAC, while the multiplier already works on the next one, so it adds no clocks.
+**No requantization multiplier.** A typical int8 layer rescales with `acc · M >> shift`. tiny-tensor-core shares one 24×17 multiplier for that among all its neurons, which works because its 32 neurons finish layer 1 together and are requantized one per clock in a 32-clock phase. Here every lane finishes a hidden neuron every 3 clocks, so a shared requantizer would stall the lanes, and each lane would need a second multiplier of its own. Instead every scale factor is folded into the integer weights offline ([DESIGN.md §4.1](DESIGN.md)): each layer's weights are scaled up by a power of two, 2^S, and the weights absorb the rest of the scale, so requantizing is just add bias, arithmetic shift (by S), clamp. What the power of two costs is weight resolution: S is the largest shift that keeps every weight within ±127, so the largest weight can land anywhere from 64 to 127 (in layer 1 it's 76, [`results/golden.log`](results/golden.log)). The bias also carries +2^(S−1), which turns the floor shift into round-half-up for free. The write-back happens in the clock after a dot product's last MAC, while the multiplier already works on the next one, so it adds no clocks.
 
 ## The latency lesson
 
@@ -133,12 +136,12 @@ More lanes buy more candidates, not a shorter decision: going from 8 to 32 lanes
 
 ## Why this connects to robotics
 
-In his talk at [Sequoia AI Ascent 2026](https://sequoiacap.com/article/ai-ascent-2026), Jim Fan argued that robots will act by imagining the future with learned world models. That turns control into an inference-latency problem, because every decision costs candidates × imagined steps × one forward pass, and the steps can't run in parallel. NVIDIA's GR00T N1.7, a 3B-parameter robot model, takes 39.9 ms per inference on a Jetson AGX Thor (MAXN power mode, 4 denoising steps, 1 camera, batch 1, TensorRT with mixed NVFP4 and FP8 layers), per the [Jetson AI Lab tutorial](https://www.jetson-ai-lab.com/tutorials/groot_n17_on_thor/). This project is the same loop shrunk to a 98-parameter model and a 2-number state, small enough to check every bit. Its clock counts and MHz estimates say nothing about real robot models and aren't comparable to GR00T's numbers.
+In his talk at [Sequoia AI Ascent 2026](https://sequoiacap.com/article/ai-ascent-2026), Jim Fan argued that robots will act by imagining the future with learned world models. That makes control an inference-latency problem. How the cost adds up depends on the method. In sampling-based MPC, this project's method, every decision costs candidates × imagined steps × one forward pass, and the imagined steps can't run in parallel. DreamZero samples no candidates: its cost is denoising steps × one forward pass (above). For a sense of what one robot-model inference costs today: NVIDIA's GR00T N1.7, a 3B-parameter vision-language-action model (it doesn't imagine futures), takes 39.9 ms per inference on a Jetson AGX Thor (MAXN power mode, 4 denoising steps, 1 camera, batch 1, TensorRT with mixed NVFP4 and FP8 layers), per the [Jetson AI Lab tutorial](https://www.jetson-ai-lab.com/tutorials/groot_n17_on_thor/). This project is a sense-plan-act loop with a learned model inside, shrunk to a 98-parameter model and a 2-number state, small enough to check every bit. Its clock counts and MHz estimates say nothing about real robot models and aren't comparable to GR00T's numbers.
 
 ## Limitations
 
 - **A toy task.** The state is two numbers, the model is 3 → 16 → 2 (98 parameters), and the task is gymnasium's Pendulum-v1.
-- **This task doesn't need the hardware's speed.** Pendulum-v1 advances 50 ms per step, and the NumPy golden model already makes a decision in about 0.35 ms on the same M2 ([`results/cosim.log`](results/cosim.log): 4,000 decisions in 1.4 s).
+- **This task doesn't need the hardware's speed.** Pendulum-v1 advances 50 ms per step, and the NumPy golden model already makes a decision in about 0.6 ms on the same M2, while it was busy with other simulations ([`results/cosim.log`](results/cosim.log): 4,000 decisions in 2.5 s).
 - **Simulation only.** The RTL runs in Icarus Verilog. There's no FPGA board; the Fmax figures are post-route estimates, out-of-context, and the 32-lane build misses its 50 MHz target.
 - **What int8 costs.** At H = 15 nothing measurable (+0.6, 95% CI −7.7 to +9.6). At H = 5 the int8 planner is 142 worse than the float one, for a reason I haven't found.
 - **The cost is approximated.** The real cost in integer units has weights 0.6587 on ω² and 0.000412 on u². The hardware uses 21/32 = 0.65625 and 1/2048 = 0.000488, so that they're shifts and adds, and each term is rounded down.
@@ -147,17 +150,21 @@ In his talk at [Sequoia AI Ascent 2026](https://sequoiacap.com/article/ai-ascent
 
 ## Run it
 
-Needs [Icarus Verilog](https://steveicarus.github.io/iverilog/) (`brew install icarus-verilog`) and Python 3 (3.14 was used) with the packages in [`requirements.txt`](requirements.txt) (`pip install -r requirements.txt`; if they're in a virtualenv, add `PYTHON=path/to/venv/bin/python` to the make command). Yosys and nextpnr-ecp5 ([OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build), or the YoWASP pip packages with `YOSYS=yowasp-yosys NEXTPNR=yowasp-nextpnr-ecp5`) are only for synthesis. Times are from an Apple M2 that was running other jobs.
+Needs [Icarus Verilog](https://steveicarus.github.io/iverilog/) (`brew install icarus-verilog`) and Python 3 (3.14 was used) with the packages in [`requirements.txt`](requirements.txt) (`pip install -r requirements.txt`; if they're in a virtualenv, add `PYTHON=path/to/venv/bin/python` to the make command). Yosys and nextpnr-ecp5 ([OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build), or the YoWASP pip packages with `YOSYS=yowasp-yosys NEXTPNR=yowasp-nextpnr-ecp5`) are only for synthesis.
 
 ```bash
-make test        # 1,000 decisions, about 2 minutes; ends with ALL TESTS PASSED
-make test-full   # all 4,000 decisions, about 11 minutes (what CI runs)
-make cosim       # the RTL drives 20 pendulum episodes, about 8 to 12 minutes
-make mutants     # 9 planted bugs must all FAIL, about 4 to 5 minutes
-make sweep       # clocks for LANES 8/16/32 x H 5/15, about 2 to 3 minutes
-make synth       # yosys resource report only, 32 lanes, about 15 s
-make timing      # place and route on an ECP5-45F, 3 seeds, LANES 32 and 8, about 6 to 7 minutes
+make test        # the first 1,000 decisions, a quick check; ends with ALL TESTS PASSED
+make test-full   # all 4,000 decisions (what CI runs)
+make cosim       # the RTL drives 20 pendulum episodes
+make mutants     # 10 planted bugs must all FAIL
+make sweep       # clocks for LANES 8/16/32 x H 5/15
+make synth       # yosys resource report and the DSP-cell listing, 32 lanes
+make timing      # place and route on an ECP5-45F, 3 seeds, LANES 32 and 8
 ```
+
+Wall times, from the `real` lines in the logs: `make test` 273 s, `make test-full` 625 s, `make cosim` 773 s, `make mutants` 456 s, `make sweep` 223 s. They were measured with all of these running at once on the M2, so a run on its own is faster. `make synth` and `make timing` weren't timed in a log.
+
+`make test` is only a quick check: its 1,000 decisions never saturate ω and never clamp a hidden value ([`results/coverage.log`](results/coverage.log)). Those cases are in `make test-full` (20 and 32 of its 4,000 decisions) and in the corner-case set of `make mutants`.
 
 ```
 decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
@@ -187,7 +194,7 @@ model/planner.py          host side of the planner, shared by golden.py and the 
 cosim/                    closed loop: Python pendulum <-> named pipes <-> Icarus
 mutants/                  planted bugs (sed scripts) and the corner-case vector picker
 perf/                     clock sweep and the clock formula check
-synth/                    Yosys script and ECP5 place-and-route
+synth/                    Yosys scripts (resources, DSP-cell listing) and ECP5 place-and-route
 rom/                      int8 weights, 24-bit biases and shifts for the hardware
 results/                  every log the numbers above come from
 ```

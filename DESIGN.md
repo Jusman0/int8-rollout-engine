@@ -9,10 +9,12 @@ exactly what is written here, and the testbench checks them against each other b
 
 ## 0. Why this exists (the one-paragraph story)
 
-Jim Fan's 2026 "Robotics: the Endgame" talk argues robots will act by imagining the future with learned world
-models (NVIDIA's DreamZero "dreams a couple of seconds ahead and acts accordingly"). The hardware cost of
-imagining is **candidates × imagined steps × one forward pass**, and the imagined steps are *sequential*: step t+1
-needs the state from step t. This project measures that cost on a toy you can hold in your head: a 2-number state
+In a 2026 talk at Sequoia AI Ascent, Jim Fan argued that robots will act by imagining the future with learned
+world models (NVIDIA's DreamZero, arXiv 2602.15922, predicts future video frames together with the actions to take).
+For sampling-based model-predictive control, this project's method, the hardware cost of imagining is
+**candidates × imagined steps × one forward pass**, and the imagined steps are *sequential*: step t+1 needs the
+state from step t. (DreamZero's cost has the same sequential shape without the candidates: denoising steps × one
+forward pass.) This project measures that cost on a toy you can hold in your head: a 2-number state
 (angle, angular velocity), a 3→16→2 network, 32 candidates, 15 steps. It is **not** a world action model and does not run
 on an FPGA; it is RTL verified in simulation, with synthesis estimates.
 
@@ -65,8 +67,11 @@ c_step   = theta_q'² + ((21 · omega_q'²) >> 5) + (u_q² >> 11)  # unsigned
 **Why no requantization multipliers:** a typical int8 network needs `acc · M >> shift` per output
 (tiny-tensor-core uses a 24×17 multiply). Here every scale factor is **folded into the integer weights offline**, so
 requantization is just *add bias, arithmetic shift, clamp*. That saves one multiplier per lane (32 total). The cost:
-each layer's scale is rounded to a power of two, and the weights absorb the rest of the scale, so the only
-approximation is rounding the weights themselves to int8.
+the scale applied to each layer's weights is a power of two, 2^S, and the weights absorb the rest of the scale. S is
+the largest shift that keeps every weight within ±127 (§4.1), so the largest weight lands between 64 and 127 rather
+than exactly at 127: the power of two can cost up to one bit of weight resolution. The approximations are rounding
+the weights and biases to integers, rounding hidden values and state changes to whole LSBs (round-half-up, from the
++2^(S−1) in each bias), and clamping h at 127; §4.2 covers the cost.
 
 ### 4.1 Folding the scales (offline, in `model/golden.py`)
 
@@ -278,11 +283,50 @@ and explained.*
     same `stat_lanes32.txt`, and nextpnr logs identical except the "Router1 time" lines. The logs from the stage-3
     runs were kept.
   - **CI:** `.github/workflows/test.yml` runs `make golden && make test-full` on ubuntu-latest with Python 3.14 and
-    Ubuntu's `iverilog` package, which may be older than the Icarus 13.0 behind every log. `make mutants` is left out:
-    it took 294 s (`results/mutants.log`), over the ~3 minute budget. CI has not run yet; nothing is pushed.
+    Ubuntu's `iverilog` package, which may be older than the Icarus 13.0 behind every log. `make mutants` is left out,
+    to keep CI to the one bit-exact check, and because its sed scripts and parallel runner have only been run on
+    macOS (BSD sed), never on Ubuntu's GNU sed. (Corrected after review: this bullet first gave a ~3 minute time
+    budget as the reason, which `make test-full`, at about 10 minutes (`results/test_full.log`), already exceeds.) CI has not run yet; nothing
+    is pushed.
   - **requirements.txt** pins numpy 2.5.4 and gymnasium 1.4.0. cocotb is not used (the co-simulation uses named
     pipes).
-  - **README:** §0 names the talk "Robotics: the Endgame"; that published title could not be verified, so the
-    README says "his talk at Sequoia AI Ascent 2026". Figures that are only in stage reports, not in a committed log,
-    are left out of the README: the "about 8 clocks per step with 16 multipliers per lane" estimate (never built)
-    and the area savings tried in a scratch copy of the RTL.
+  - **README:** §0 named the talk "Robotics: the Endgame"; that published title could not be verified, so the
+    README says "his talk at Sequoia AI Ascent 2026" (§0 now says the same). Figures that are only in stage reports,
+    not in a committed log, are left out of the README: the "about 8 clocks per step with 16 multipliers per lane"
+    estimate (never built) and the area savings tried in a scratch copy of the RTL.
+  - **External figures (deviation from §8, "the README states only measured results"; added after review):** the
+    README's latency and robotics sections cite figures that were not measured here, as context: DreamZero
+    (arXiv 2602.15922) cutting 16 denoising steps to an effective 4 and then 1, and going from about 5.7 s to 150 ms
+    per action chunk; GR00T N1.7 taking 39.9 ms per inference on a Jetson AGX Thor (Jetson AI Lab tutorial). Each is
+    sourced inline with a link, and the README's Results section says these come from the linked sources, not from
+    this repo.
+- **Review fixes (2026-10-12).** No rule in §1–§5 was changed. §0 and §4 were reworded (below); the synthesizable
+  RTL is unchanged: Yosys builds the same netlist as before, byte for byte, at LANES = 32 and 8
+  (`results/synth/netlist_check.txt`), so the place-and-route logs still apply and were not re-run.
+  - **§0:** the quote "dreams a couple of seconds ahead and acts accordingly" was not from any source in the
+    research notes, and the talk title "Robotics: the Endgame" could not be verified; §0 now names the event
+    (Sequoia AI Ascent 2026) and cites DreamZero by its arXiv number. It also says the candidates × imagined steps ×
+    forward pass cost is specific to sampling-based MPC; DreamZero's is denoising steps × forward pass.
+  - **§4:** "the only approximation is rounding the weights themselves to int8" was too narrow. Hidden values and
+    state changes are also rounded to whole LSBs and h clamps at 127. The power-of-two scale itself costs weight
+    resolution: the largest weight lands between 64 and 127 (76 in layer 1, `results/golden.log`).
+  - **Testbench (§7.2):** while busy is high, the testbench drives `theta0`/`omega0` to the bitwise inverse of the
+    measured state, so a design that reads the ports instead of the copies made at `start` fails. It prints FAIL
+    when `+n` asks for 0 decisions or more than the vector directory holds (before, it ran the decisions it had and
+    could print PASS). The decision printout shows the state from the vectors, not the (changed) ports.
+  - **Planted bug 10 (§7.4):** the lanes read the live `theta0`/`omega0` ports. It FAILs on both sets; all 10 are
+    caught on the corner set, 7 of 10 on the first 300 (`results/mutants.log`).
+  - **RTL, simulation only:** the parameter check now accepts only LANES = 8, 16 or 32 (the stage-2 rule was "LANES
+    must divide 32"; LANES = 4 at H = 15 needs 10,010 clocks, more than the 10,000-clock watchdog). A new check prints
+    an error when `act_we` is high while `busy` is high. The hardware still does not block such a write; enforcing
+    "ACT may only be written while busy is low" stays the host's job. Both checks sit between `synthesis
+    translate_off` and `translate_on`.
+  - **Synthesis evidence:** `synth/dsp_cells.ys` (run by `make synth`) lists the source of every DSP multiplier
+    (`results/synth/dsp_cells_lanes32.txt`): 32 are the lanes' multipliers and the 33rd is `3 * j` in the W1 ROM
+    address. The RTL was not changed to remove it, so the logged resource and timing numbers stay valid.
+  - **Logs re-run** with the new testbench, at commit 56fb632: `make test`, `make test-full`, the configuration
+    sweep, `make sweep`, `make mutants` and `make cosim` (LANES = 32, and LANES = 8 for one episode), all PASS.
+    `results/cycles.log` came out byte-identical. New logs: `results/coverage.log` (the corner cases in the first
+    1,000 decisions that `make test` replays: no ω saturation, no h clamp, 6 ties), `results/machine.txt`.
+  - **Stage-4 bullets corrected:** the CI bullet now gives the real reason `make mutants` is not in CI, and a new
+    bullet records the README's external figures (DreamZero, GR00T) as a deviation from §8.
