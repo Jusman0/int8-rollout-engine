@@ -23,7 +23,7 @@
 // new commands), then answers 'E' code. The error LED stays on until the
 // next good 'P' or 'D'.
 //
-// Everything runs on the 27 MHz crystal clock, no PLL.
+// Everything runs on the 27 MHz oscillator clock (U3, pin 4), no PLL.
 //
 // LEDs (active low: the LED's anode is on 3.3 V through 510 ohms, so the pin
 // lights it by pulling low; see board/README.md):

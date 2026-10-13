@@ -11,7 +11,7 @@ The goal: run the unchanged `rtl/rollout_engine.v` on the FPGA, feed it the same
 | [`tb_top.v`](tb_top.v) | testbench: talks to `top.v` only through its UART pins, bit by bit, and checks every reply byte |
 | [`host.py`](host.py) | the Mac side: `ping`, `replay`, `loop`, and `--fake` (a golden-model board on a pseudo-terminal) |
 | [`tangnano20k.cst`](tangnano20k.cst) | pin constraints for `top.v` |
-| [`blinky.v`](blinky.v), [`blinky.cst`](blinky.cst) | the first smoke test: the LEDs count |
+| [`blinky.v`](blinky.v), [`blinky.cst`](blinky.cst) | the first smoke test: the LEDs count, and holding S1 lights one LED (checks LED and button polarity) |
 | [`check_pins.py`](check_pins.py) | after place and route: every port is on the pin it should be |
 | [`report.sh`](report.sh) | build summary (resources, Fmax, slack) from the nextpnr logs |
 | [`Makefile`](Makefile) | `sim`, `bit`, `blinky`, `prog`, `prog-blinky`, `flash`, `host-fake`, `results`, `clean` |
@@ -29,12 +29,14 @@ make blinky bit LANES=8
 1. **Plug in the board** with a USB-C *data* cable, straight into the Mac (no hub). Some LEDs may light from the factory demo.
 2. **Find the serial port:** `ls /dev/cu.*`. Expect one or two `/dev/cu.usbserial-…` entries (the BL616 chip on the board is the USB-JTAG and the USB-UART). None at all: see troubleshooting, it's almost always the cable.
 3. **Check JTAG:** `~/oss-cad-suite/bin/openFPGALoader -b tangnano20k --detect` should name the GW2A-18 chip.
-4. **`make prog-blinky`.** The six LEDs count up in binary, about 6 counts a second. Hold S1 (the button wired to pin 88): the count pauses. If it only counts *while* S1 is held, the button is the other way round from the schematic: invert `btn_rst` in `top.v` before going on.
+4. **`make prog-blinky`.** The six LEDs count up in binary, about 6 counts a second. Now hold S1 (the button wired to pin 88): **exactly one LED should light (LED 0)**. That one pattern checks both polarities `top.v` relies on. One LED *dark* and five lit instead: the LED polarity is the other way round. A single LED lit *without* pressing, and counting only while S1 is held: the button polarity is the other way round (invert `btn_rst` in `top.v`). Either way, stop and fix that before going on.
 5. **`make prog LANES=8`.** LED 0 now blinks about once a second (the heartbeat: the design is loaded and the 27 MHz clock runs). This is SRAM programming: power-cycling the board brings the factory design back.
 6. **`python3 host.py ping`.** Expect `reply: K 8 15 1` (LANES 8, H 15, protocol 1) and `PASS`. LED 3 flickers when a byte arrives, LED 4 when one is sent.
 7. **`python3 host.py replay --n 20`.** Expect `20/20` on every line and `PASS`. Each decision is checked in full: all 32 costs, all 32 final states, best_idx, best_cost and the clock count.
 
-If all seven pass, copy the logs that `host.py` printed (`board/build/logs/…`) into `board/results/` and commit them: they are the first hardware evidence. `ping` and `replay` need only Python's standard library; `loop` needs NumPy and gymnasium (use the virtualenv's python).
+**Before any later `make prog`/`make flash`: unplug and replug the USB cable.** Once the UART has been used, the board's debugger disables JTAG until it is replugged (Sipeed's FAQ, below). Replugging loses nothing: an SRAM design is gone at power-off anyway.
+
+If all seven pass, copy the logs that `host.py` printed (`board/build/logs/…`) into `board/results/` and commit them: they are the first hardware evidence. Copy only logs whose first line has no `--fake`: the fake-board runs are in the same folder (named `…_fake_…`) and are not hardware results. `ping` and `replay` need only Python's standard library; `loop` needs NumPy and gymnasium (use the virtualenv's python).
 
 ## The board, checked pin by pin
 
@@ -49,7 +51,7 @@ Every number below was checked against Sipeed's schematic (`Tang_Nano_20K_3921_S
 | UART, FPGA → Mac | 69 | FPGA output, into the BL616's RX | schematic (PIN69_SYS_TX ↔ BL616_UART_RX), Sipeed `uart/src/top.cst`, LiteX |
 | UART, Mac → FPGA | 70 | FPGA input, from the BL616's TX | schematic (PIN70_SYS_RX ↔ BL616_UART_TX), same |
 
-Pins 87 and 88 are also the chip's MODE0/MODE1 configuration pins (that's why they have pull-downs). **Don't hold S1 or S2 while plugging the board in or while programming**: the FPGA may sample them when it configures.
+Pin 88 (S1) is also the chip's MODE0 configuration pin and pin 87 (S2) its MODE1 (that's why they have pull-downs). **Don't hold S1 or S2 while plugging the board in or while programming**: the FPGA may sample them when it configures.
 
 ### Probe pins for the logic analyzer
 
@@ -90,7 +92,11 @@ The full headers, from the schematic (same in 3921 and 3923):
 | 19 | 53 (HDMI DDC clock) | +3.3 V |
 | 20 | 52 (HDMI DDC data) | GND |
 
-(LiteX's platform file lists the same headers with pins 75 and 76 swapped; the schematic, which is the source, has them as above. Neither is used here.)
+(LiteX's platform file lists the same headers with 75/76 and 25/26 swapped; the schematic, which is the source, has them as above, and so does Sipeed's pin diagram. None of those four is used here.)
+
+Two things that could make you second-guess the probe pins, neither of which is a problem:
+- The 3921 schematic's DISPLAY sheet has labels `PIN73_SYS_LED3` … `PIN76_SYS_LED0` near the LCD connector. Those nets actually go to LED pins 17–20 through the `LCD_INIT0..3` hierarchical pins, not to FPGA pins 73–76; the 3923 revision renames them `PIN15..18_SYS_LED*`. Pins 71–74 connect only to the headers.
+- Sipeed's pin diagram marks J5 pins 17 and 18 (FPGA 72 and 71) as the DS2 joystick adapter's ATTN/DATA. Don't fit the joystick adapter while probing.
 
 ## The protocol, byte by byte
 
@@ -131,15 +137,15 @@ The probes come from flip-flops one clock (37 ns) after the signals they copy, s
 1. **All 4,000 decisions at LANES = 8:** `python3 host.py replay --n 4000` (about 4 minutes: the UART needs 56 ms per decision for its 649 bytes, the engine 0.19 ms). Only the full set has the decisions that saturate ω (20 of them) or clamp a hidden value (32); the first 1,000 have neither ([`results/coverage.log`](../results/coverage.log)).
 2. **20 closed-loop episodes:** `<venv>/bin/python host.py loop --episodes 20`. Every action applied to the simulated pendulum is the one the FPGA picked, and each episode's return must equal `sim/returns.txt` exactly (float `==`). Once this passes, it *is* hardware-in-the-loop: a real FPGA controller, a simulated plant. It isn't real-time: a decision takes at least 56 ms over the UART, longer than Pendulum-v1's 50 ms step, and the simulated pendulum simply waits.
 3. **Measure the busy pulse in PulseView** (8 channels, 24 MHz, sigrok), wired as in the probe table. Trigger on CH0 rising, run `replay`, and measure the high time. **Expected, not measured:** 5,022 clocks × 37.04 ns = **186.0 µs** at LANES = 8, and 1,281 × 37.04 ns = **47.4 µs** at LANES = 32. At 24 MHz the measurement is good to about ±42 ns. `tb_top.v` already checks in simulation that the probe is high for exactly `cycles` clocks. While at it, the UART bits: 234 clocks = 8.67 µs on `probe_tx` (the board's 234-clock bit), 1/115,200 = 8.68 µs on `probe_rx` (the BL616's).
-4. **LANES = 32:** `make prog LANES=32` and `replay --n 4000` again; then the second placement seed, `make prog LANES=32 SEED=2` (both bitstreams are built by `make results`). Then `loop --episodes 20` on the one that passes.
+4. **LANES = 32:** replug the board (JTAG is off after a UART session), `make prog LANES=32` and `replay --n 4000` again; then the second placement seed, `make prog LANES=32 SEED=2` (both bitstreams are built by `make results`). Then `loop --episodes 20` on the one that passes.
 5. Save every log in `board/results/` and commit them. Only then does anything here become a hardware result.
 
 ## The toolchain risk, and why the bit-exact check is the answer
 
 The open-source Gowin flow (yosys → nextpnr-himbaechel → apicula's `gowin_pack`) is reverse-engineered, and two open apicula issues report designs on this exact chip and board that build without an error and then compute wrong on silicon:
 
-- [#514](https://github.com/YosysHQ/apicula/issues/514) (June 2026): a self-checking design computes wrong when yosys uses ALU carry cells, although RTL simulation, gate-level simulation and timing all pass; the same design built with `synth_gowin -noalu` (adders made of LUTs) works.
-- [#541](https://github.com/YosysHQ/apicula/issues/541) (September 2026): wrong results for some nextpnr placement seeds and right for others; the failing part is a comparison in a final selection scan, much like this engine's argmin.
+- [#514](https://github.com/YosysHQ/apicula/issues/514) (June 2026): a self-checking design computes wrong when yosys uses ALU carry cells, although RTL simulation, gate-level simulation and timing all pass; the same design built with `synth_gowin -noalu` (adders made of LUTs) works. The thread reports that a nextpnr fix (PR #1736) cured the original reproducers while a larger variant still fails; I haven't checked whether the nextpnr build used here includes it.
+- [#541](https://github.com/YosysHQ/apicula/issues/541) (September 2026): a *signed* comparison evaluated as if it were unsigned, for some nextpnr placement seeds and not others. The engine's argmin compare is unsigned, so the closer match here is the lanes' signed clamp and saturation logic, and those paths are only exercised by the full set: the first 1,000 recorded decisions never saturate ω or clamp a hidden value. So Wednesday's `replay --n 20` cannot catch a #541-type bug; Friday's `replay --n 4000` can.
 
 This engine is carry-heavy: the LANES = 8 build has 1,550 ALU (carry-chain) cells, in the lanes' 24-bit accumulators and cost adders, the counters, and the argmin's 24-bit comparison, which is also the slowest path nextpnr reports. It also uses 272 LUT-RAM blocks (RAM16SDP4) for the action memory and the hidden-value registers.
 
@@ -149,25 +155,26 @@ If `replay` reports mismatches:
 
 1. **What fails?** The log names the fields per decision. Only `cycles` wrong: the FSM or its counter. Costs wrong but states right: the cost adders. States wrong: the lane arithmetic. Everything wrong from decision 0: suspect the UART or the bitstream, not arithmetic.
 2. **Is it repeatable?** Run the same `replay` twice. Different decisions failing each time points at timing or the board, not a wrong netlist.
-3. **Another placement:** `make prog SEED=2` (and 3, 4 …). If some seeds pass and others don't, the problem is in place and route or packing.
-4. **No carry chains:** `make prog SYNTH_OPTS=-noalu` builds every adder and comparator from plain LUTs (the #514 workaround; the LANES = 8 variant is built and fits, see `results/build_l8.txt`). If that passes where the normal build fails, the ALU mapping is the culprit. `SYNTH_OPTS=-nolutram` does the same for the LUT RAM.
+3. **Another placement:** replug the board (JTAG is off after a UART session), then `make prog SEED=2` (and 3, 4 …). If some seeds pass and others don't, the problem is in place and route or packing.
+4. **No carry chains:** replug, then `make prog SYNTH_OPTS=-noalu` builds every adder and comparator from plain LUTs (the #514 workaround; the LANES = 8 variant is built and fits, see `results/build_l8.txt`). If that passes where the normal build fails, the ALU mapping is the culprit. `SYNTH_OPTS=-nolutram` does the same for the LUT RAM.
 5. Report it upstream with the failing decision numbers, the logs and the bitstream variants.
 
 ## Troubleshooting
 
-- **`openFPGALoader` says `CRC Error` and `ID Verify Failed`** (and programming fails). This is the BL616's own firmware, not your bitstream: version 2024122312 is known not to work with openFPGALoader ([openFPGALoader troubleshooting](https://trabucayre.github.io/openFPGALoader/guide/troubleshooting.html), [issue #511](https://github.com/trabucayre/openFPGALoader/issues/511), where updating fixed it). The same firmware has been reported to run the UART at 4× the wrong speed (a 115,200 design needed 460,800 on the host), which would show up here as no reply or `E 2` to every ping. The firmware version is the USB serial number: `system_profiler SPUSBDataType` and look for the Sipeed/converter entry. Fix: update to **2025030317**, the latest firmware Sipeed lists for the Nano 20K, with Bouffalo's BLDevCube, following [Sipeed's update page](https://wiki.sipeed.com/hardware/en/tang/common-doc/update_debugger.html): hold the UPDATE button (behind the HDMI connector) while plugging in, and the board shows up as a `/dev/tty.usbmodem…` device.
-- **Close anything holding the serial port before programming.** The BL616 serves JTAG and the UART over one USB connection; quit `screen`/`minicom`/a stuck `host.py` before `make prog`. (`host.py` closes the port when each command ends.) A precaution: I couldn't find Sipeed documenting the interaction either way.
+- **`openFPGALoader` says `CRC Error` and `ID Verify Failed`** (and programming fails). This is the BL616's own firmware, not your bitstream: openFPGALoader's [troubleshooting page](https://trabucayre.github.io/openFPGALoader/guide/troubleshooting.html) says firmware 2024122312 cannot be flashed on Linux-based systems, and [issue #511](https://github.com/trabucayre/openFPGALoader/issues/511) (on Debian) was fixed by a firmware update. Nothing has been reported for macOS either way. Separately, Sipeed's FAQ says to update the debugger firmware if the UART's actual baud rate is always 4× the set one, or its output is garbled; here that would show up as no reply or `E 2` to every ping. The firmware version is the USB serial number: `system_profiler SPUSBDataType` and look for the Sipeed/converter entry. Fix: update to **2025030317**, the latest firmware Sipeed lists for the Nano 20K, with Bouffalo's BLDevCube, following [Sipeed's update page](https://wiki.sipeed.com/hardware/en/tang/common-doc/update_debugger.html): hold the UPDATE button (behind the HDMI connector) while plugging in, and the board shows up as a `/dev/tty.usbmodem…` device.
+- **Programming fails after using the UART: unplug and replug first.** The BL616 serves JTAG and the UART over one USB connection, and [Sipeed's Tang FAQ](https://wiki.sipeed.com/hardware/en/tang/common-doc/questions.html) (section "Programmer") says: "when using its uart function, Jtag is disabled". Its fix is to replug the Type-C cable; closing the terminal is not enough. So after any `host.py` run (or `screen`/`minicom`), replug before `make prog`/`make flash`. Once `host.py` has found the UART port it prints it: pass it with `--port` from then on, so `host.py` never opens the JTAG-side port while searching.
 - **No `/dev/cu.usbserial-*` at all**, but the board's LEDs light: a charge-only USB-C cable (power wires, no data). Use one known to carry data, connected directly to the Mac.
 - **The board doesn't power up on a USB-C-to-C cable:** try a USB-A-to-C cable, or another cable or port.
 - **`ping` gets no reply:** is LED 0 blinking (design loaded)? Does LED 3 flash when you ping (bytes arrive)? If not, try the other `/dev/cu.usbserial-*` with `--port`. `E 2` replies mean framing errors: a baud-rate mismatch (see the firmware item).
+- **LED 1 (busy) stuck on, and nothing answers, not even `ping`:** the engine started a decision and never raised `done` (top.v waits for it without a time limit), which on this toolchain most likely means a miscompiled bitstream. Press S1 to reset, then replug and try another placement (`SEED=2`) or `SYNTH_OPTS=-noalu` as in the mismatch checklist above.
 - **`openFPGALoader` can't find the board:** unplug and replug, no hub, and check `openFPGALoader --scan-usb`.
 
 ## What was run here, without a board
 
 | Check | Command (in `board/`) | Result |
 |---|---|---|
-| Board testbench: ping, all three error replies, ±3% host baud rate, a short glitch, the reset button, then 20 recorded decisions with every reply byte and the busy-probe width checked | `make sim` (LANES 8 and 32) | PASS at both, see `build/tb_top_l*.log` |
-| `host.py` against the fake board on a pseudo-terminal | `make host-fake PYTHON=<venv python>` | ping, replay 50 (50/50 bit-exact), loop 1 (return equal to `sim/returns.txt`): PASS |
+| Board testbench: ping, all three error replies, a bad stop bit inside a `D` followed by 60 command-like bytes (exactly one `E 2`, only after the quiet timeout), ±3% host baud rate, a short glitch, the reset button, then 20 recorded decisions with every reply byte, the busy-probe width and the 4-clock done-probe width checked; throughout, no action byte may be written while the engine is busy | `make sim` (LANES 8 and 32) | PASS at both, see `build/tb_top_l*.log`. Planted bugs (an immediate error reply, an unstretched done probe, a forced write while busy) each make it FAIL |
+| `host.py` against the fake board on a pseudo-terminal | `make host-fake PYTHON=<venv python>` | ping, replay 50 (50/50 bit-exact), loop 1 (return equal to `sim/returns.txt`), and the abort path (a fake board that answers every `D` with an error: replay stops after 5, counts nothing as passing, FAIL): PASS |
 | `host.py`'s vector reader on the whole set | `<venv python> host.py --fake --fake-lanes 32 replay --n 4000` | 4,000/4,000 bit-exact, PASS (5 s: a pty has no baud rate) |
 | Bitstreams, each with the pin check | `make results` (15 minutes on the M2) | `build/engine_l8.fs`, `build/engine_l8_noalu.fs`, `build/engine_l32.fs`, `build/engine_l32_s2.fs`, `build/blinky.fs`; every port on its expected pin; summaries below |
 
@@ -183,5 +190,5 @@ From [`results/build_l8.txt`](results/build_l8.txt) and [`results/build_l32.txt`
 | LANES = 32, seed 2 | the same cells | | | | 106.30 MHz | +27.63 ns |
 
 - **LUT positions:** an ALU cell (one bit of a carry chain) takes the place of a LUT; in every placed design here no slice uses ALU *k* and LUT *k* together. So LANES = 32 fills 99% of the chip's logic. It placed and routed, but there is no room left for anything else.
-- **Fmax:** nextpnr's Gowin estimates look optimistic. The same engine on an ECP5 reached 47 to 54 MHz ([`results/synth/summary.txt`](../results/synth/summary.txt)), with the lane multiplier on the critical path; here the slowest path is in the argmin scan in every build: from the ARG counter `n` or a `cost_mem` entry, through the `cost_mem[n]` read and the 24-bit compare, to the enable of `best_idx`/`best_cost`. The board doesn't depend on these numbers: it runs at 27 MHz from the crystal, and even three times nextpnr's slowest path (3 × 9.41 ns = 28 ns) would fit in the 37.04 ns clock period. That is arithmetic on an estimate, not a measurement.
+- **Fmax:** nextpnr's Gowin estimates look optimistic. The same engine on an ECP5 reached 47 to 54 MHz ([`results/synth/summary.txt`](../results/synth/summary.txt)), with the lane multiplier on the critical path; here the slowest path is in the argmin scan in every build: from the ARG counter `n` or a `cost_mem` entry, through the `cost_mem[n]` read and the 24-bit compare, to the enable of `best_idx`/`best_cost`. The board doesn't depend on these numbers: it runs at 27 MHz from the oscillator, and even three times the slowest path of any build here (the `-noalu` LANES = 8 build: 3 × 10.91 ns = 32.7 ns) would fit in the 37.04 ns clock period. That is arithmetic on an estimate, not a measurement.
 - `blinky` is 38 LUT4s and 30 ALUs.

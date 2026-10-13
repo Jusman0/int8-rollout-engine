@@ -34,7 +34,7 @@ echo
 echo "These are the tools' estimates. Nothing here has run on the board yet."
 echo "nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine"
 echo "(results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane"
-echo "multiplier. The board does not depend on them: it runs at 27 MHz from the crystal."
+echo "multiplier. The board does not depend on them: it runs at 27 MHz from the 27 MHz oscillator (U3)."
 echo
 
 for seed in $seeds; do

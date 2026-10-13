@@ -19,7 +19,7 @@ column 55 on this chip) and IOT40A is X39Y0/IOBA. A match therefore also
 checks that nextpnr's package database agrees with the schematic.
 
   python3 board/check_pins.py board/build/pnr_l8_s1.json top
-  python3 board/check_pins.py board/build/blinky_pnr.json blinky
+  python3 board/check_pins.py board/build/pnr_blinky.json blinky
 Standard library only. Exit status 0 means every port is where it belongs.
 """
 
