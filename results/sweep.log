@@ -1,0 +1,219 @@
+# Cycle sweep (DESIGN.md §7.5): command  PYTHON=python3 bash perf/sweep.sh
+# 2026-10-12 20:29:09, commit 43a549e, rtl/tb/model/rom/Makefile: no uncommitted changes
+# Icarus Verilog version 13.0 (stable) (v13_0); Python 3.14.0
+# 200 decisions per run (episode 0, seed 0). clocks per decision = the engine's cycles
+# output (start seen -> done raised), min..max over the run; the testbench checks it
+# against its own count. bit-exact = decisions where all 32 costs / all 32 final
+# (theta, omega) / best_idx and best_cost equal the golden model's.
+#
+#  LANES   H decisions    clocks/decis.    costs   states   best_idx verdict wall
+#     32  15       200      1281..1281  200/200  200/200    200/200    PASS   41s
+#     16  15       200      2528..2528  200/200  200/200    200/200    PASS   42s
+#      8  15       200      5022..5022  200/200  200/200    200/200    PASS   49s
+#     32   5       200        451..451  200/200  200/200    200/200    PASS   15s
+#     16   5       200        868..868  200/200  200/200    200/200    PASS   14s
+#      8   5       200      1702..1702  200/200  200/200    200/200    PASS   16s
+#
+# formula vs measured and multiplier use: results/cycles.log (perf/cycles.py)
+# total sweep time: 181 s
+
+################################################################
+# vectors: $PYTHON model/golden.py --H 15 --count 200 --out sim/perf/h15
+Integer model (DESIGN.md §4.1):
+  hidden scale s_h = 0.050455 (largest training pre-activation / 127)
+  S1 = 7, S2 = (8, 7)   (all >= 1: OK)
+  max |W1| = 76, max |W2| = 109, B1 in [-2076, 5882], B2 = [-22, -99]
+  worst-case |acc1| = 16,957, |acc2| = 85,570  (ACC_W = 24 holds |acc| < 8,388,608: OK)
+  worst-case cost: 26,975 per step, 431,600 for H = 16 (< 2^24: OK)
+wrote rom/w1.hex, b1.hex, w2.hex, b2.hex, params.vh
+
+Hand check: decision 0, lane 0, imagined step 0
+  x = (theta, omega, u) = (-7, 10, -85)
+  layer 1:  acc1[j] = B1[j] + W1[j][0]*-7 + W1[j][1]*10 + W1[j][2]*-85;  h[j] = clamp(acc1[j] >> 7, 0, 127)
+    j= 0:     730 =    643 + (  29)*-7 + (  29)*10 + (   0)*-85   >> 7 =     5   h = 5
+    j= 1:    3905 =   4268 + (  49)*-7 + (  -2)*10 + (   0)*-85   >> 7 =    30   h = 30
+    j= 2:   -2367 =  -2076 + (  43)*-7 + (   1)*10 + (   0)*-85   >> 7 =   -19   h = 0
+    j= 3:    2622 =     33 + ( -12)*-7 + ( -13)*10 + ( -31)*-85   >> 7 =    20   h = 20
+    j= 4:   -4615 =   -366 + ( -63)*-7 + (   7)*10 + (  56)*-85   >> 7 =   -37   h = 0
+    j= 5:    3273 =     54 + ( -12)*-7 + ( -18)*10 + ( -39)*-85   >> 7 =    25   h = 25
+    j= 6:   -3005 =   -381 + ( -43)*-7 + (   5)*10 + (  35)*-85   >> 7 =   -24   h = 0
+    j= 7:   -3661 =    292 + (  34)*-7 + ( -40)*10 + (  39)*-85   >> 7 =   -29   h = 0
+    j= 8:    1451 =   1541 + (   5)*-7 + ( -14)*10 + (  -1)*-85   >> 7 =    11   h = 11
+    j= 9:    3502 =   -145 + ( -31)*-7 + (  37)*10 + ( -36)*-85   >> 7 =    27   h = 27
+    j=10:    6365 =   5882 + ( -69)*-7 + (   0)*10 + (   0)*-85   >> 7 =    49   h = 49
+    j=11:    3074 =   3370 + (   8)*-7 + ( -24)*10 + (   0)*-85   >> 7 =    24   h = 24
+    j=12:   -5882 =    110 + (  26)*-7 + (  31)*10 + (  72)*-85   >> 7 =   -46   h = 0
+    j=13:    -557 =   -504 + ( -21)*-7 + ( -20)*10 + (   0)*-85   >> 7 =    -5   h = 0
+    j=14:    4900 =    573 + (  64)*-7 + (  -7)*10 + ( -57)*-85   >> 7 =    38   h = 38
+    j=15:    3739 =   4386 + (  76)*-7 + (  -3)*10 + (   1)*-85   >> 7 =    29   h = 29
+  acc2[0] = -22 + (21)*5 + (7)*30 + (-35)*0 + (-48)*20 + (-9)*0 + (-17)*25 + (25)*0 + (-61)*0 + (18)*11 + (67)*27 + (-8)*49 + (-21)*24 + (30)*0 + (-22)*0 + (-7)*38 + (19)*29
+          = 304;  d_theta = acc2[0] >> 8 = 1
+  acc2[1] = -99 + (-33)*5 + (37)*30 + (-109)*0 + (36)*20 + (35)*0 + (19)*25 + (40)*0 + (-23)*0 + (-32)*11 + (26)*27 + (-49)*49 + (-16)*24 + (-26)*0 + (64)*0 + (-58)*38 + (70)*29
+          = -568;  d_omega = acc2[1] >> 7 = -5
+  theta' = low 8 bits of (-7 + 1) = -6
+  omega' = clamp(10 + -5, -127, 127) = 5
+  c_step = (-6)^2 + ((21*(5)^2) >> 5) + ((-85)^2 >> 11) = 36 + 16 + 3 = 55
+  in LSBs: float model d = (+0.610, -4.881), real physics d = (+0.613, -5.223), integer step d = (+1, -5)
+
+Integer closed loop, seed 0, H = 15: 1 episodes, mean return -1.2
+wrote 200 decisions to sim/perf/h15/ (int_step and the loop version agree on the first 100)
+corner cases in these 200 decisions (96,000 lane-steps): h clamped at 127: 0, theta wraps: 0, omega saturations: 0, decisions with a tied best cost: 0
+observed |acc1| = 13,077, |acc2| = 3,415
+(2.1 s)
+################################################################
+# vectors: $PYTHON model/golden.py --H 5 --count 200 --out sim/perf/h5
+Integer model (DESIGN.md §4.1):
+  hidden scale s_h = 0.050455 (largest training pre-activation / 127)
+  S1 = 7, S2 = (8, 7)   (all >= 1: OK)
+  max |W1| = 76, max |W2| = 109, B1 in [-2076, 5882], B2 = [-22, -99]
+  worst-case |acc1| = 16,957, |acc2| = 85,570  (ACC_W = 24 holds |acc| < 8,388,608: OK)
+  worst-case cost: 26,975 per step, 431,600 for H = 16 (< 2^24: OK)
+wrote rom/w1.hex, b1.hex, w2.hex, b2.hex, params.vh
+
+Hand check: decision 0, lane 0, imagined step 0
+  x = (theta, omega, u) = (-7, 10, -85)
+  layer 1:  acc1[j] = B1[j] + W1[j][0]*-7 + W1[j][1]*10 + W1[j][2]*-85;  h[j] = clamp(acc1[j] >> 7, 0, 127)
+    j= 0:     730 =    643 + (  29)*-7 + (  29)*10 + (   0)*-85   >> 7 =     5   h = 5
+    j= 1:    3905 =   4268 + (  49)*-7 + (  -2)*10 + (   0)*-85   >> 7 =    30   h = 30
+    j= 2:   -2367 =  -2076 + (  43)*-7 + (   1)*10 + (   0)*-85   >> 7 =   -19   h = 0
+    j= 3:    2622 =     33 + ( -12)*-7 + ( -13)*10 + ( -31)*-85   >> 7 =    20   h = 20
+    j= 4:   -4615 =   -366 + ( -63)*-7 + (   7)*10 + (  56)*-85   >> 7 =   -37   h = 0
+    j= 5:    3273 =     54 + ( -12)*-7 + ( -18)*10 + ( -39)*-85   >> 7 =    25   h = 25
+    j= 6:   -3005 =   -381 + ( -43)*-7 + (   5)*10 + (  35)*-85   >> 7 =   -24   h = 0
+    j= 7:   -3661 =    292 + (  34)*-7 + ( -40)*10 + (  39)*-85   >> 7 =   -29   h = 0
+    j= 8:    1451 =   1541 + (   5)*-7 + ( -14)*10 + (  -1)*-85   >> 7 =    11   h = 11
+    j= 9:    3502 =   -145 + ( -31)*-7 + (  37)*10 + ( -36)*-85   >> 7 =    27   h = 27
+    j=10:    6365 =   5882 + ( -69)*-7 + (   0)*10 + (   0)*-85   >> 7 =    49   h = 49
+    j=11:    3074 =   3370 + (   8)*-7 + ( -24)*10 + (   0)*-85   >> 7 =    24   h = 24
+    j=12:   -5882 =    110 + (  26)*-7 + (  31)*10 + (  72)*-85   >> 7 =   -46   h = 0
+    j=13:    -557 =   -504 + ( -21)*-7 + ( -20)*10 + (   0)*-85   >> 7 =    -5   h = 0
+    j=14:    4900 =    573 + (  64)*-7 + (  -7)*10 + ( -57)*-85   >> 7 =    38   h = 38
+    j=15:    3739 =   4386 + (  76)*-7 + (  -3)*10 + (   1)*-85   >> 7 =    29   h = 29
+  acc2[0] = -22 + (21)*5 + (7)*30 + (-35)*0 + (-48)*20 + (-9)*0 + (-17)*25 + (25)*0 + (-61)*0 + (18)*11 + (67)*27 + (-8)*49 + (-21)*24 + (30)*0 + (-22)*0 + (-7)*38 + (19)*29
+          = 304;  d_theta = acc2[0] >> 8 = 1
+  acc2[1] = -99 + (-33)*5 + (37)*30 + (-109)*0 + (36)*20 + (35)*0 + (19)*25 + (40)*0 + (-23)*0 + (-32)*11 + (26)*27 + (-49)*49 + (-16)*24 + (-26)*0 + (64)*0 + (-58)*38 + (70)*29
+          = -568;  d_omega = acc2[1] >> 7 = -5
+  theta' = low 8 bits of (-7 + 1) = -6
+  omega' = clamp(10 + -5, -127, 127) = 5
+  c_step = (-6)^2 + ((21*(5)^2) >> 5) + ((-85)^2 >> 11) = 36 + 16 + 3 = 55
+  in LSBs: float model d = (+0.610, -4.881), real physics d = (+0.613, -5.223), integer step d = (+1, -5)
+
+Integer closed loop, seed 0, H = 5: 1 episodes, mean return -0.9
+wrote 200 decisions to sim/perf/h5/ (int_step and the loop version agree on the first 100)
+corner cases in these 200 decisions (32,000 lane-steps): h clamped at 127: 0, theta wraps: 0, omega saturations: 0, decisions with a tied best cost: 25
+observed |acc1| = 10,020, |acc2| = 964
+(0.7 s)
+################################################################
+# run LANES=32 H=15: make test LANES=32 VEC=sim/perf/h15 N=200  (41 s)
+iverilog -g2005 -Wall -I. -Isim/perf/h15 -DVEC_DIR='"sim/perf/h15"' -Ptb_rollout_engine.LANES=32 \
+		-o sim/perf/h15/tb_rollout_engine_l32 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/perf/h15/tb_rollout_engine_l32 +n=200 | tee sim/perf/h15/tb_l32.log
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/perf/h15
+decisions run: 200
+costs: 200/200 decisions bit-exact (all 32 candidates)
+final states: 200/200 decisions bit-exact (all 32 theta and omega)
+best_idx: 200/200 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 200/200)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 3534022000 (1ps)
+ALL TESTS PASSED
+################################################################
+# run LANES=16 H=15: make test LANES=16 VEC=sim/perf/h15 N=200  (42 s)
+iverilog -g2005 -Wall -I. -Isim/perf/h15 -DVEC_DIR='"sim/perf/h15"' -Ptb_rollout_engine.LANES=16 \
+		-o sim/perf/h15/tb_rollout_engine_l16 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/perf/h15/tb_rollout_engine_l16 +n=200 | tee sim/perf/h15/tb_l16.log
+decision 0: state (-7, 10), best 30, cost 397, 2528 clocks
+decision 1: state (-6, 11), best 1, cost 323, 2528 clocks
+decision 2: state (-4, 13), best 0, cost 218, 2528 clocks
+clocks in each FSM state, decision 0: INIT 2, L1 1440, L2 960, COST 90, STORE 2, DRAIN 1, ARG 32, DONE 1
+config: LANES = 16, H = 15, vectors from sim/perf/h15
+decisions run: 200
+costs: 200/200 decisions bit-exact (all 32 candidates)
+final states: 200/200 decisions bit-exact (all 32 theta and omega)
+best_idx: 200/200 decisions match (best_cost too)
+clocks per decision: 2528..2528 (cycles output matches the testbench count on 200/200)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 6028022000 (1ps)
+ALL TESTS PASSED
+################################################################
+# run LANES=8 H=15: make test LANES=8 VEC=sim/perf/h15 N=200  (49 s)
+iverilog -g2005 -Wall -I. -Isim/perf/h15 -DVEC_DIR='"sim/perf/h15"' -Ptb_rollout_engine.LANES=8 \
+		-o sim/perf/h15/tb_rollout_engine_l8 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/perf/h15/tb_rollout_engine_l8 +n=200 | tee sim/perf/h15/tb_l8.log
+decision 0: state (-7, 10), best 30, cost 397, 5022 clocks
+decision 1: state (-6, 11), best 1, cost 323, 5022 clocks
+decision 2: state (-4, 13), best 0, cost 218, 5022 clocks
+clocks in each FSM state, decision 0: INIT 4, L1 2880, L2 1920, COST 180, STORE 4, DRAIN 1, ARG 32, DONE 1
+config: LANES = 8, H = 15, vectors from sim/perf/h15
+decisions run: 200
+costs: 200/200 decisions bit-exact (all 32 candidates)
+final states: 200/200 decisions bit-exact (all 32 theta and omega)
+best_idx: 200/200 decisions match (best_cost too)
+clocks per decision: 5022..5022 (cycles output matches the testbench count on 200/200)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 11016022000 (1ps)
+ALL TESTS PASSED
+################################################################
+# run LANES=32 H=5: make test LANES=32 VEC=sim/perf/h5 N=200  (15 s)
+iverilog -g2005 -Wall -I. -Isim/perf/h5 -DVEC_DIR='"sim/perf/h5"' -Ptb_rollout_engine.LANES=32 \
+		-o sim/perf/h5/tb_rollout_engine_l32 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/perf/h5/tb_rollout_engine_l32 +n=200 | tee sim/perf/h5/tb_l32.log
+decision 0: state (-7, 10), best 9, cost 183, 451 clocks
+decision 1: state (-7, 6), best 25, cost 200, 451 clocks
+decision 2: state (-6, 3), best 22, cost 179, 451 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 240, L2 160, COST 15, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 5, vectors from sim/perf/h5
+decisions run: 200
+costs: 200/200 decisions bit-exact (all 32 candidates)
+final states: 200/200 decisions bit-exact (all 32 theta and omega)
+best_idx: 200/200 decisions match (best_cost too)
+clocks per decision: 451..451 (cycles output matches the testbench count on 200/200)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 1234022000 (1ps)
+ALL TESTS PASSED
+################################################################
+# run LANES=16 H=5: make test LANES=16 VEC=sim/perf/h5 N=200  (14 s)
+iverilog -g2005 -Wall -I. -Isim/perf/h5 -DVEC_DIR='"sim/perf/h5"' -Ptb_rollout_engine.LANES=16 \
+		-o sim/perf/h5/tb_rollout_engine_l16 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/perf/h5/tb_rollout_engine_l16 +n=200 | tee sim/perf/h5/tb_l16.log
+decision 0: state (-7, 10), best 9, cost 183, 868 clocks
+decision 1: state (-7, 6), best 25, cost 200, 868 clocks
+decision 2: state (-6, 3), best 22, cost 179, 868 clocks
+clocks in each FSM state, decision 0: INIT 2, L1 480, L2 320, COST 30, STORE 2, DRAIN 1, ARG 32, DONE 1
+config: LANES = 16, H = 5, vectors from sim/perf/h5
+decisions run: 200
+costs: 200/200 decisions bit-exact (all 32 candidates)
+final states: 200/200 decisions bit-exact (all 32 theta and omega)
+best_idx: 200/200 decisions match (best_cost too)
+clocks per decision: 868..868 (cycles output matches the testbench count on 200/200)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 2068022000 (1ps)
+ALL TESTS PASSED
+################################################################
+# run LANES=8 H=5: make test LANES=8 VEC=sim/perf/h5 N=200  (16 s)
+iverilog -g2005 -Wall -I. -Isim/perf/h5 -DVEC_DIR='"sim/perf/h5"' -Ptb_rollout_engine.LANES=8 \
+		-o sim/perf/h5/tb_rollout_engine_l8 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/perf/h5/tb_rollout_engine_l8 +n=200 | tee sim/perf/h5/tb_l8.log
+decision 0: state (-7, 10), best 9, cost 183, 1702 clocks
+decision 1: state (-7, 6), best 25, cost 200, 1702 clocks
+decision 2: state (-6, 3), best 22, cost 179, 1702 clocks
+clocks in each FSM state, decision 0: INIT 4, L1 960, L2 640, COST 60, STORE 4, DRAIN 1, ARG 32, DONE 1
+config: LANES = 8, H = 5, vectors from sim/perf/h5
+decisions run: 200
+costs: 200/200 decisions bit-exact (all 32 candidates)
+final states: 200/200 decisions bit-exact (all 32 theta and omega)
+best_idx: 200/200 decisions match (best_cost too)
+clocks per decision: 1702..1702 (cycles output matches the testbench count on 200/200)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 3736022000 (1ps)
+ALL TESTS PASSED

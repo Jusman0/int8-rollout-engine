@@ -251,3 +251,11 @@ and explained.*
   - **Pass rule:** the original RTL must PASS on both sets and every mutant must FAIL on the corner set. The
     command is `PYTHON=$(PYTHON) bash mutants/run_mutants.sh`; the `make mutants` target is for the integrator to
     add.
+- **Stage 3, cycle sweep (2026-10-12).** No rule in §1–§6 was changed. `perf/sweep.sh` runs the unchanged
+  testbench (`make test LANES=… VEC=… N=200`) for LANES ∈ {32, 16, 8} × H ∈ {15, 5}, on 200 decisions per
+  configuration (episode 0, seed 0) made by `golden.py --count 200 --out sim/perf/h15` and `--H 5 … sim/perf/h5`.
+  golden.py rewrites `rom/` each time; the script checksums `rom/` and stops if the contents changed.
+  `perf/cycles.py` derives `cycles = (32/LANES)·(83H + 2) + 34` state by state from the FSM and checks it against the
+  measured totals and the per-state counts of decision 0: all six match exactly (`results/cycles.log`). These
+  200-decision sets contain no h clamp, ω saturation or θ wrap (the H = 15 set has no tie either), so they measure
+  clocks, not corner-case coverage; that comes from the 4,000-decision runs and the planted-bug tests.

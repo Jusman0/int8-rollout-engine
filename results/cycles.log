@@ -1,0 +1,62 @@
+Clocks per decision: formula vs measured (results/sweep.log)
+  formula: cycles = (32 / LANES) * (83 * H + 2) + 34, read off rtl/rollout_engine.v
+  measured: the engine's cycles output (min..max over the run), and the clocks
+  per FSM state that the testbench counted for decision 0
+
+  LANES   H  passes  predicted  measured  difference  8 states match  testbench
+     32  15       1       1281      1281           0             yes       PASS
+     16  15       2       2528      2528           0             yes       PASS
+      8  15       4       5022      5022           0             yes       PASS
+     32   5       1        451       451           0             yes       PASS
+     16   5       2        868       868           0             yes       PASS
+      8   5       4       1702      1702           0             yes       PASS
+
+Where the clocks go, per FSM state (the formula; checked against decision 0 above)
+  LANES   H    INIT     L1     L2   COST  STORE  DRAIN    ARG   DONE    total
+     32  15       1    720    480     45      1      1     32      1     1281
+     16  15       2   1440    960     90      2      1     32      1     2528
+      8  15       4   2880   1920    180      4      1     32      1     5022
+     32   5       1    240    160     15      1      1     32      1      451
+     16   5       2    480    320     30      2      1     32      1      868
+      8   5       4    960    640     60      4      1     32      1     1702
+
+Multiplier utilization = useful MACs / (multipliers x clocks)
+  useful MACs = 32 candidates x H steps x 80 network MACs (48 layer 1 + 32 layer 2)
+  multipliers = LANES (one per lane); clocks = measured clocks per decision
+  'busy' also counts the 3 cost squares per step, which use the same multiplier
+
+  LANES   H  multipliers  clocks  useful MACs  mult-clocks  utilization    busy
+     32  15           32    1281        38400        40992       93.68%  97.19%
+     16  15           16    2528        38400        40448       94.94%  98.50%
+      8  15            8    5022        38400        40176       95.58%  99.16%
+     32   5           32     451        12800        14432       88.69%  92.02%
+     16   5           16     868        12800        13888       92.17%  95.62%
+      8   5            8    1702        12800        13616       94.01%  97.53%
+  The multipliers sit idle in INIT and STORE (2 clocks per pass) and in DRAIN, ARG
+  and DONE (34 clocks per decision). Fewer lanes means more passes over the same
+  34-clock tail, so utilization goes up as LANES goes down, even though each
+  decision takes longer.
+
+The floor that H sets: one candidate's H imagined steps run one after another
+  LANES   H  one candidate = 83*H  decision  decision - floor
+     32  15                 1245      1281                36
+     16  15                 1245      2528              1283
+      8  15                 1245      5022              3777
+     32   5                  415       451                36
+     16   5                  415       868               453
+      8   5                  415      1702              1287
+  H = 15: LANES 8 -> 32 takes 5022 -> 1281 clocks, 3.92x fewer for 4x the lanes
+  H = 5: LANES 8 -> 32 takes 1702 -> 451 clocks, 3.77x fewer for 4x the lanes
+
+Testbench clocks per decision, including the host writing the actions
+  LANES   H  testbench  =  cycles  +  32*H action bytes  +  testbench other
+     32  15       1767  =    1281  +                480  +                6
+     16  15       3014  =    2528  +                480  +                6
+      8  15       5508  =    5022  +                480  +                6
+     32   5        617  =     451  +                160  +                6
+     16   5       1034  =     868  +                160  +                6
+      8   5       1868  =    1702  +                160  +                6
+  testbench other = 6: 1 raising start, 1 lowering it, 1 checking that done fell,
+  and 3 that pass during the 32 one-nanosecond debug-port reads.
+
+RESULT: PASS, the formula matches every run exactly
