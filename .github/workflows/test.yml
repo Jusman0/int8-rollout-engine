@@ -1,0 +1,23 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    # make test-full took 679 s on a busy Apple M2 (results/test_full.log).
+    # The testbench watchdog catches a hung FSM; this limit catches anything else.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install Icarus Verilog and the Python packages
+        run: |
+          sudo apt-get update && sudo apt-get install -y iverilog
+          python3 -m pip install -r requirements.txt
+      # make mutants is not run here: it took 294 s with 4 simulations at a time
+      # on an Apple M2 (results/mutants.log), over a ~3 minute budget. Run it locally.
+      - name: All 4,000 decisions, bit-exact against the golden model
+        run: make golden && make test-full

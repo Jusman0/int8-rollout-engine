@@ -1,0 +1,5 @@
+# Python packages for the golden model (model/), the co-simulation host
+# (cosim/) and the corner-vector picker (mutants/). Pinned to the versions
+# every log in results/ was made with, on Python 3.14.
+numpy==2.5.4
+gymnasium==1.4.0

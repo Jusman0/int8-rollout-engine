@@ -4,3 +4,4 @@ sim/
 __pycache__/
 *.vcd
 .venv/
+.DS_Store
