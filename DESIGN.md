@@ -232,3 +232,22 @@ and explained.*
     tick that differs.
   - **Hangs:** the host gives the simulator 60 s to connect and 60 s per tick (`SIGALRM`), then fails. The
     testbench keeps the 10,000-clock watchdog and stops with FAIL if the host's input is short or the pipe closes.
+- **Stage 3, planted-bug tests (2026-10-12).** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
+  Makefile were not touched. The unmodified RTL passes and all 9 planted bugs FAIL (`results/mutants.log`). These
+  are the details §7.4 left open, and one deviation:
+  - **Mutants:** §7.4's five, the dropped 21/32 weight on the ω cost, and three slips of my own: the step loop
+    stops one imagined step early (fencepost), layer-2 dot products never restart from the bias (accumulator not
+    cleared), and ω′ is written back one clock late (a read-after-write hazard: the ω′² cost term squares the old
+    ω, while every final state stays right). "θ saturates" clamps to ±127, the ω clamp copied over; "logical
+    shift" changes all three requantization shifts. Each mutant is one sed script, `mutants/NN_name.sed`, applied
+    to a copy of `rtl/` in `sim/mutants/<name>/` and compiled with the unchanged testbench. A script that changes
+    nothing, or a copy that does not compile, is reported as an error, never as a caught bug.
+  - **Which decisions (deviation from "run the first N"):** each mutant runs N = 300 decisions from two sets. On
+    the first 300 recorded decisions, 3 mutants PASS (ω wraps, h clamps at 255, tie-break `<=`): those decisions
+    never saturate ω, never clamp an h and never tie, so the mutated logic computes exactly what the correct logic
+    does. The set that decides the result is 300 decisions picked by `mutants/pick_corner_vectors.py` from the
+    4,000 in `sim/`: all 71 that clamp an h, saturate ω or tie, then the earliest others. The lines are copied
+    unchanged, so the expected values are still `golden.py`'s. The first-300 results stay in the log to show why.
+  - **Pass rule:** the original RTL must PASS on both sets and every mutant must FAIL on the corner set. The
+    command is `PYTHON=$(PYTHON) bash mutants/run_mutants.sh`; the `make mutants` target is for the integrator to
+    add.

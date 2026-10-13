@@ -1,0 +1,550 @@
+# Planted-bug (mutation) tests, DESIGN.md §7.4. Everything below the "command:" line is the complete
+# output of that command (stdout; then the wall time from /usr/bin/time -p). The notes in this header
+# were written after the run.
+#
+# Result: the unmodified RTL PASSES on both vector sets; all 9 planted bugs FAIL on the corner set.
+#
+# Notes:
+# - Why two vector sets. On the first 300 recorded decisions, 3 mutants PASS: 02 (omega wraps),
+#   03 (tie-break with <=) and 05 (h clamps at 255). They are not equivalent designs. They are
+#   equivalent ON THAT DATA: those 300 decisions never saturate omega, never clamp an h and never
+#   have a tied best cost (coverage line below), and the mutated logic only differs from the
+#   correct logic in exactly those cases. The stimulus never asked the question. The corner set
+#   (all 71 decisions out of 4,000 that hit one of those cases, plus the earliest others) catches
+#   all three, and the counts match the corner cases exactly: 02 fails in the 20 omega-saturating
+#   decisions, 05 in the 32 h-clamping ones, 03 in the 27 tied ones (only best_idx; the costs and
+#   states are right), 01 in the 48 decisions where theta wraps.
+# - 06 (no 21/32 weight) and 09 (omega' written back one clock late, so its cost squares the old
+#   omega) leave every final state right: 0 state failures. Only the cost check (and the best
+#   check, through best_cost) sees them. That is why the testbench compares costs and states
+#   separately.
+# - 07 (one imagined step short) passes the best check in 2 of the first 300 decisions. One-off
+#   check with model/golden.py's int_rollout (14 vs 15 steps, decisions 0..299): in decisions 258
+#   and 259 the best candidate's 15th step costs 0 (theta' = 0, |omega'| <= 1, |u| <= 45: the
+#   pendulum is balanced), so best_idx and best_cost come out the same. Its costs and states still
+#   fail in all 300. 07 also runs 83 fewer clocks per decision (1198, not 1281), but the clock
+#   check compares the engine's cycles output with the testbench's count of the same clocks, so
+#   that check cannot see it.
+# - Every mutant compiled with iverilog -g2005 -Wall without a warning (no compiler output below).
+# - The harness itself was checked in a scratch copy of the repo (not committed): a sed script that
+#   matches nothing is reported "not applied", a copy that does not compile "compile error" (both
+#   make the run fail, they are never counted as caught), and an FSM that never finishes "FAIL
+#   watchdog".
+#
+################################################################
+# command: PYTHON=<venv python> bash mutants/run_mutants.sh   (what "make mutants" runs, see mutants/run_mutants.sh)
+# Planted-bug tests (DESIGN.md §7.4): bash mutants/run_mutants.sh
+# started 2026-10-12 20:31:32, Icarus Verilog version 13.0 (stable) (v13_0)
+# rtl/ and tb/ from commit 43a549e (0 uncommitted changes), N = 300 decisions per run, LANES = 32
+
+Vector sets (corner cases replayed through the golden model):
+  recorded vectors (sim/, H = 15), all 4000 decisions: h clamped at 127 in 32 (133 times), theta wraps in 272 (8052 times), omega saturates in 20 (228 times), tied best cost in 27
+  first 300 (sim/ as recorded): 300 decisions: h clamped at 127 in 0 (0 times), theta wraps in 9 (288 times), omega saturates in 0 (0 times), tied best cost in 0
+  corner 300 (sim/mutants/vec/): 300 decisions: h clamped at 127 in 32 (133 times), theta wraps in 48 (1327 times), omega saturates in 20 (228 times), tied best cost in 27
+    = all 71 decisions with an h clamp, an omega saturation or a tie, plus the first 229 others (decisions 0..3955)
+
+Each result column: PASS or FAIL, then how many of the 300 decisions failed each
+testbench check: costs / final states / best (best_idx or best_cost wrong).
+A mutant must FAIL.
+
+mutant               | what it models                                                     | first 300          | corner 300        
+-------------------- | ------------------------------------------------------------------ | ------------------ | ------------------
+00_original          | nothing planted: the RTL as committed                              | PASS 0/0/0         | PASS 0/0/0        
+01_theta_saturates   | theta saturates at +-127 instead of wrapping                       | FAIL 9/9/9         | FAIL 48/48/38     
+02_omega_wraps       | omega wraps (keeps the low 8 bits) instead of saturating           | PASS 0/0/0         | FAIL 20/20/4      
+03_argmin_last_tie   | argmin compares with <=, so a tie picks the LAST index             | PASS 0/0/0         | FAIL 0/0/27       
+04_logical_shift     | logical >> instead of arithmetic >>> in requantization             | FAIL 300/300/300   | FAIL 300/300/300  
+05_h_clamp_255       | hidden values clamp at 255 instead of 127                          | PASS 0/0/0         | FAIL 32/32/7      
+06_no_omega_weight   | omega cost term is omega'^2, the 21/32 weight dropped              | FAIL 300/0/300     | FAIL 300/0/300    
+07_one_step_short    | off-by-one in the step loop: imagines H-1 steps, not H             | FAIL 300/300/298   | FAIL 300/300/300  
+08_l2_no_bias        | layer-2 dot products never restart from the bias                   | FAIL 300/300/300   | FAIL 300/300/300  
+09_omega_wb_late     | omega' written back one clock late: its cost uses the OLD omega    | FAIL 300/0/269     | FAIL 300/0/273    
+
+first 300 decisions:  6 of 9 mutants caught
+corner 300 decisions: 9 of 9 mutants caught
+wall time: 294 s (4 simulations at a time)
+ALL MUTANTS CAUGHT
+
+################################################################
+# Details: each mutant's change and the testbench output
+
+================================================================
+== 00_original: nothing planted: the RTL as committed
+-- testbench, first 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 300/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 300/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 300/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 300/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 01_theta_saturates: theta saturates at +-127 instead of wrapping
+-- change (diff rtl/ mutated):
+134c134
+<             theta <= theta + d_theta[7:0];
+---
+>             theta <= (theta + d_theta > 127) ? 8'sd127 : (theta + d_theta < -127) ? -8'sd127 : theta + d_theta[7:0];
+-- testbench, first 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+decision 200 lane 0: cost 230423, golden 177034
+decision 200 lane 0: (theta, omega) = (127, 78), golden (-78, 37)
+decision 200: best 26 (cost 221841), golden 16 (cost 173767)
+decision 201 lane 0: cost 246656, golden 175061
+decision 201 lane 0: (theta, omega) = (127, 76), golden (-72, 23)
+decision 201: best 22 (cost 230356), golden 16 (cost 174229)
+decision 202 lane 0: cost 266801, golden 174631
+decision 202 lane 0: (theta, omega) = (127, 92), golden (-65, 24)
+decision 202: best 23 (cost 254006), golden 19 (cost 171618)
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 291/300 decisions bit-exact (all 32 candidates)
+final states: 291/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 291/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+decision 200 lane 0: cost 230423, golden 177034
+decision 200 lane 0: (theta, omega) = (127, 78), golden (-78, 37)
+decision 200: best 26 (cost 221841), golden 16 (cost 173767)
+decision 201 lane 0: cost 246656, golden 175061
+decision 201 lane 0: (theta, omega) = (127, 76), golden (-72, 23)
+decision 201: best 22 (cost 230356), golden 16 (cost 174229)
+decision 202 lane 0: cost 266801, golden 174631
+decision 202 lane 0: (theta, omega) = (127, 92), golden (-65, 24)
+decision 202: best 23 (cost 254006), golden 19 (cost 171618)
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 252/300 decisions bit-exact (all 32 candidates)
+final states: 252/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 262/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 02_omega_wraps: omega wraps (keeps the low 8 bits) instead of saturating
+-- change (diff rtl/ mutated):
+137,138c137
+<             omega <= (omega_sum >  127) ?  8'sd127 :
+<                      (omega_sum < -127) ? -8'sd127 : omega_sum[7:0];
+---
+>             omega <= omega_sum[7:0];
+-- testbench, first 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 300/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 300/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+decision 236 lane 26: cost 122103, golden 122434
+decision 236 lane 26: (theta, omega) = (-118, -125), golden (-118, 127)
+decision 239 lane 21: cost 218696, golden 181464
+decision 239 lane 21: (theta, omega) = (-107, 126), golden (60, -95)
+decision 254 lane 2: cost 136535, golden 136301
+decision 254 lane 2: (theta, omega) = (114, -125), golden (-110, 127)
+decision 281: best 13 (cost 97937), golden 13 (cost 98103)
+decision 282: best 16 (cost 122621), golden 16 (cost 122453)
+decision 283: best 11 (cost 140855), golden 11 (cost 140853)
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 280/300 decisions bit-exact (all 32 candidates)
+final states: 280/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 296/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 03_argmin_last_tie: argmin compares with <=, so a tie picks the LAST index
+-- change (diff rtl/ mutated):
+280c280
+<                     if (n == 5'd0 || cost_mem[n] < best_cost) begin
+---
+>                     if (n == 5'd0 || cost_mem[n] <= best_cost) begin
+-- testbench, first 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 300/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 300/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+decision 229: best 21 (cost 59), golden 0 (cost 59)
+decision 230: best 10 (cost 53), golden 0 (cost 53)
+decision 231: best 24 (cost 171), golden 1 (cost 171)
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 300/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 273/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 04_logical_shift: logical >> instead of arithmetic >>> in requantization
+-- change (diff rtl/ mutated):
+110,112c110,112
+<     wire signed [ACC_W-1:0] acc_s1  = acc >>> S1;
+<     wire signed [ACC_W-1:0] d_theta = acc >>> S2_0;
+<     wire signed [ACC_W-1:0] d_omega = acc >>> S2_1;
+---
+>     wire signed [ACC_W-1:0] acc_s1  = acc >> S1;
+>     wire signed [ACC_W-1:0] d_theta = acc >> S2_0;
+>     wire signed [ACC_W-1:0] d_omega = acc >> S2_1;
+-- testbench, first 300 decisions:
+decision 0 lane 0: cost 253209, golden 6272
+decision 0 lane 0: (theta, omega) = (66, 127), golden (-30, -37)
+decision 0: best 6 (cost 212000), golden 30 (cost 397)
+decision 0: state (-7, 10), best 6, cost 212000, 1281 clocks
+decision 1 lane 0: cost 247119, golden 367
+decision 1 lane 0: (theta, omega) = (60, 127), golden (-4, -10)
+decision 1: best 16 (cost 227062), golden 1 (cost 323)
+decision 1: state (-6, 11), best 16, cost 227062, 1281 clocks
+decision 2 lane 0: cost 261341, golden 218
+decision 2 lane 0: (theta, omega) = (-115, 127), golden (-1, -8)
+decision 2: best 13 (cost 221701), golden 0 (cost 218)
+decision 2: state (-4, 13), best 13, cost 221701, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0 lane 0: cost 253209, golden 6272
+decision 0 lane 0: (theta, omega) = (66, 127), golden (-30, -37)
+decision 0: best 6 (cost 212000), golden 30 (cost 397)
+decision 0: state (-7, 10), best 6, cost 212000, 1281 clocks
+decision 1 lane 0: cost 247119, golden 367
+decision 1 lane 0: (theta, omega) = (60, 127), golden (-4, -10)
+decision 1: best 16 (cost 227062), golden 1 (cost 323)
+decision 1: state (-6, 11), best 16, cost 227062, 1281 clocks
+decision 2 lane 0: cost 261341, golden 218
+decision 2 lane 0: (theta, omega) = (-115, 127), golden (-1, -8)
+decision 2: best 13 (cost 221701), golden 0 (cost 218)
+decision 2: state (-4, 13), best 13, cost 221701, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 05_h_clamp_255: hidden values clamp at 255 instead of 127
+-- change (diff rtl/ mutated):
+116c116
+<                        (acc_s1 > 127)  ? 8'd127 : acc_s1[7:0];
+---
+>                        (acc_s1 > 255)  ? 8'd255 : acc_s1[7:0];
+-- testbench, first 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 300/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 300/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+decision 235 lane 3: cost 193850, golden 178483
+decision 235 lane 3: (theta, omega) = (-102, 40), golden (88, -29)
+decision 240 lane 9: cost 157099, golden 165443
+decision 240 lane 9: (theta, omega) = (118, 6), golden (82, -101)
+decision 241 lane 4: cost 157712, golden 167299
+decision 241 lane 4: (theta, omega) = (119, 2), golden (83, -107)
+decision 241: best 4 (cost 157712), golden 11 (cost 159611)
+decision 283: best 11 (cost 131898), golden 11 (cost 140853)
+decision 284: best 11 (cost 143420), golden 11 (cost 158430)
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 268/300 decisions bit-exact (all 32 candidates)
+final states: 268/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 293/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 06_no_omega_weight: omega cost term is omega'^2, the 21/32 weight dropped
+-- change (diff rtl/ mutated):
+101c101
+<             SRC_OMEGA: term = ((sq20 << 4) + (sq20 << 2) + sq20) >> 5;
+---
+>             SRC_OMEGA: term = sq20[15:0];
+-- testbench, first 300 decisions:
+decision 0 lane 0: cost 7893, golden 6272
+decision 0: best 30 (cost 536), golden 30 (cost 397)
+decision 0: state (-7, 10), best 30, cost 536, 1281 clocks
+decision 1 lane 0: cost 499, golden 367
+decision 1: best 7 (cost 469), golden 1 (cost 323)
+decision 1: state (-6, 11), best 7, cost 469, 1281 clocks
+decision 2 lane 0: cost 318, golden 218
+decision 2: best 5 (cost 312), golden 0 (cost 218)
+decision 2: state (-4, 13), best 5, cost 312, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0 lane 0: cost 7893, golden 6272
+decision 0: best 30 (cost 536), golden 30 (cost 397)
+decision 0: state (-7, 10), best 30, cost 536, 1281 clocks
+decision 1 lane 0: cost 499, golden 367
+decision 1: best 7 (cost 469), golden 1 (cost 323)
+decision 1: state (-6, 11), best 7, cost 469, 1281 clocks
+decision 2 lane 0: cost 318, golden 218
+decision 2: best 5 (cost 312), golden 0 (cost 218)
+decision 2: state (-4, 13), best 5, cost 312, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 07_one_step_short: off-by-one in the step loop: imagines H-1 steps, not H
+-- change (diff rtl/ mutated):
+266c266
+<                         if (t == H - 1) state <= S_STORE;
+---
+>                         if (t == H - 2) state <= S_STORE;
+-- testbench, first 300 decisions:
+decision 0 lane 0: cost 4469, golden 6272
+decision 0 lane 0: (theta, omega) = (-25, -35), golden (-30, -37)
+decision 0: best 30 (cost 366), golden 30 (cost 397)
+decision 0: state (-7, 10), best 30, cost 366, 1198 clocks
+decision 1 lane 0: cost 280, golden 367
+decision 1 lane 0: (theta, omega) = (-3, -5), golden (-4, -10)
+decision 1: best 0 (cost 280), golden 1 (cost 323)
+decision 1: state (-6, 11), best 0, cost 280, 1198 clocks
+decision 2 lane 0: cost 169, golden 218
+decision 2 lane 0: (theta, omega) = (0, -3), golden (-1, -8)
+decision 2: best 11 (cost 161), golden 0 (cost 218)
+decision 2: state (-4, 13), best 11, cost 161, 1198 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 672, L2 448, COST 42, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 2/300 decisions match (best_cost too)
+clocks per decision: 1198..1198 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5052022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0 lane 0: cost 4469, golden 6272
+decision 0 lane 0: (theta, omega) = (-25, -35), golden (-30, -37)
+decision 0: best 30 (cost 366), golden 30 (cost 397)
+decision 0: state (-7, 10), best 30, cost 366, 1198 clocks
+decision 1 lane 0: cost 280, golden 367
+decision 1 lane 0: (theta, omega) = (-3, -5), golden (-4, -10)
+decision 1: best 0 (cost 280), golden 1 (cost 323)
+decision 1: state (-6, 11), best 0, cost 280, 1198 clocks
+decision 2 lane 0: cost 169, golden 218
+decision 2 lane 0: (theta, omega) = (0, -3), golden (-1, -8)
+decision 2: best 11 (cost 161), golden 0 (cost 218)
+decision 2: state (-4, 13), best 11, cost 161, 1198 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 672, L2 448, COST 42, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1198..1198 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5052022000 (1ps)
+
+================================================================
+== 08_l2_no_bias: layer-2 dot products never restart from the bias
+-- change (diff rtl/ mutated):
+182c182
+<         ex_first <= iss_l1 ? (i == 2'd0) : (j == 4'd0);
+---
+>         ex_first <= iss_l1 ? (i == 2'd0) : 1'b0;
+-- testbench, first 300 decisions:
+decision 0 lane 0: cost 217480, golden 6272
+decision 0 lane 0: (theta, omega) = (-89, 124), golden (-30, -37)
+decision 0: best 19 (cost 202277), golden 30 (cost 397)
+decision 0: state (-7, 10), best 19, cost 202277, 1281 clocks
+decision 1 lane 0: cost 238104, golden 367
+decision 1 lane 0: (theta, omega) = (123, 110), golden (-4, -10)
+decision 1: best 6 (cost 216717), golden 1 (cost 323)
+decision 1: state (-6, 11), best 6, cost 216717, 1281 clocks
+decision 2 lane 0: cost 233603, golden 218
+decision 2 lane 0: (theta, omega) = (-113, 115), golden (-1, -8)
+decision 2: best 13 (cost 222534), golden 0 (cost 218)
+decision 2: state (-4, 13), best 13, cost 222534, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0 lane 0: cost 217480, golden 6272
+decision 0 lane 0: (theta, omega) = (-89, 124), golden (-30, -37)
+decision 0: best 19 (cost 202277), golden 30 (cost 397)
+decision 0: state (-7, 10), best 19, cost 202277, 1281 clocks
+decision 1 lane 0: cost 238104, golden 367
+decision 1 lane 0: (theta, omega) = (123, 110), golden (-4, -10)
+decision 1: best 6 (cost 216717), golden 1 (cost 323)
+decision 1: state (-6, 11), best 6, cost 216717, 1281 clocks
+decision 2 lane 0: cost 233603, golden 218
+decision 2 lane 0: (theta, omega) = (-113, 115), golden (-1, -8)
+decision 2: best 13 (cost 222534), golden 0 (cost 218)
+decision 2: state (-4, 13), best 13, cost 222534, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 0/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 0/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+
+================================================================
+== 09_omega_wb_late: omega' written back one clock late: its cost uses the OLD omega
+-- change (diff rtl/ mutated):
+175c175
+<             ex_rq_omega <= iss_l2 && (i == 2'd1) && (j == N_HID - 1); // d_omega's 16th MAC
+---
+>             ex_rq_omega <= (state == S_COST) && (i == 2'd0);        // 1st COST beat
+-- testbench, first 300 decisions:
+decision 0 lane 0: cost 5439, golden 6272
+decision 0: best 30 (cost 446), golden 30 (cost 397)
+decision 0: state (-7, 10), best 30, cost 446, 1281 clocks
+decision 1 lane 0: cost 381, golden 367
+decision 1: best 0 (cost 381), golden 1 (cost 323)
+decision 1: state (-6, 11), best 0, cost 381, 1281 clocks
+decision 2 lane 0: cost 286, golden 218
+decision 2: best 11 (cost 282), golden 0 (cost 218)
+decision 2: state (-4, 13), best 11, cost 282, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 31/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+-- testbench, corner 300 decisions:
+decision 0 lane 0: cost 5439, golden 6272
+decision 0: best 30 (cost 446), golden 30 (cost 397)
+decision 0: state (-7, 10), best 30, cost 446, 1281 clocks
+decision 1 lane 0: cost 381, golden 367
+decision 1: best 0 (cost 381), golden 1 (cost 323)
+decision 1: state (-6, 11), best 0, cost 381, 1281 clocks
+decision 2 lane 0: cost 286, golden 218
+decision 2: best 11 (cost 282), golden 0 (cost 218)
+decision 2: state (-4, 13), best 11, cost 282, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim/mutants/vec
+decisions run: 300
+costs: 0/300 decisions bit-exact (all 32 candidates)
+final states: 300/300 decisions bit-exact (all 32 theta and omega)
+best_idx: 27/300 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 300/300)
+busy/done protocol errors: 0
+FAIL
+tb/tb_rollout_engine.v:185: $finish called at 5301022000 (1ps)
+real 294.05
+user 1051.78
+sys 9.67
+exit status: 0
