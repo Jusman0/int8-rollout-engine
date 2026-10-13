@@ -4,6 +4,8 @@
 
 A 32-lane int8 Verilog engine that, every control tick, imagines 32 possible futures of a pendulum through a small learned physics model, scores each one, and hands back the best plan. It's sampling-based model-predictive control with the model rollouts in hardware, checked bit-exact against a Python golden model and in a closed loop where the RTL picks every action. Everything runs in simulation (Icarus Verilog), with synthesis estimates for an ECP5 FPGA.
 
+Board bring-up on a Tang Nano 20K: in progress, see [board/README.md](board/README.md). Nothing has run on hardware yet.
+
 ## Results
 
 Every result here comes from a log in [`results/`](results/), and the command next to it reproduces the numbers in that log (the logs also carry notes and wall times added when they were made). Runs: Apple M2, Icarus Verilog 13.0, Python 3.14, NumPy 2.5.4, gymnasium 1.4.0 ([`machine.txt`](results/machine.txt)). The DreamZero and GR00T figures further down come from the sources linked there, not from this repo.
