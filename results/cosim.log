@@ -1,0 +1,78 @@
+# Closed-loop co-simulation (DESIGN.md §7.3). Each block below is one command's complete output
+# (the report, the simulator's own output, wall time from /usr/bin/time -p). The machine was running other
+# simulations at the same time (load average about 9), so wall times are slower than a run alone.
+#
+# Summary: 20/20 episode returns identical (float ==) to the golden model's integer-planner closed loop,
+# 4000/4000 RTL choices equal golden's, 1281 clocks per decision; LANES = 8 (1 episode) also identical.
+
+################################################################
+# command: PYTHON=<venv python> bash cosim/run.sh   (what 'make cosim' runs; started 2026-10-12 20:22:12, Icarus Verilog version 13.0 (stable) (v13_0), Python 3.14.0, NumPy 2.5.4, gymnasium 1.4.0)
+Closed-loop co-simulation (DESIGN.md §7.3): gymnasium Pendulum-v1, seed 0, H = 15, 20 episodes x 200 ticks
+RTL: rollout_engine (LANES = 32) in Icarus Verilog, through named pipes; its best_idx picks every applied action
+golden: model/golden.py integer planner; both use the host code in model/planner.py
+
+episode              RTL return           golden return  return    chosen best_idx
+      0     -1.1752364061018081     -1.1752364061018081  MATCH     200/200 equal to golden
+      1     -121.96811079924579     -121.96811079924579  MATCH     200/200 equal to golden
+      2     -1.2176434052019922     -1.2176434052019922  MATCH     200/200 equal to golden
+      3      -1.187621498555145      -1.187621498555145  MATCH     200/200 equal to golden
+      4     -125.71269249498259     -125.71269249498259  MATCH     200/200 equal to golden
+      5      -261.9782961208811      -261.9782961208811  MATCH     200/200 equal to golden
+      6     -128.48925509269995     -128.48925509269995  MATCH     200/200 equal to golden
+      7     -256.95368823994494     -256.95368823994494  MATCH     200/200 equal to golden
+      8     -239.39529085746054     -239.39529085746054  MATCH     200/200 equal to golden
+      9     -1.2629175482360169     -1.2629175482360169  MATCH     200/200 equal to golden
+     10     -121.23458077095529     -121.23458077095529  MATCH     200/200 equal to golden
+     11      -246.6793730854758      -246.6793730854758  MATCH     200/200 equal to golden
+     12     -127.60224817586045     -127.60224817586045  MATCH     200/200 equal to golden
+     13     -127.55385569957693     -127.55385569957693  MATCH     200/200 equal to golden
+     14     -127.60789347451488     -127.60789347451488  MATCH     200/200 equal to golden
+     15     -128.33903233465995     -128.33903233465995  MATCH     200/200 equal to golden
+     16      -4.287789328413009      -4.287789328413009  MATCH     200/200 equal to golden
+     17     -128.41772702614577     -128.41772702614577  MATCH     200/200 equal to golden
+     18     -243.70390995493094     -243.70390995493094  MATCH     200/200 equal to golden
+     19     -126.28980447863765     -126.28980447863765  MATCH     200/200 equal to golden
+
+decisions made by the RTL: 4000 (32 candidates x 15 imagined steps each)
+RTL best_idx and best_cost equal the golden model's on the same inputs: 4000/4000
+RTL chosen best_idx equal to the golden closed loop's: 4000/4000
+episode returns identical (float ==): 20/20
+mean return: RTL -126.1, golden -126.1
+clocks per decision (RTL cycles output): 1281..1281
+wall time: RTL closed loop 739.0 s (184.8 ms per decision), golden closed loop 1.4 s
+PASS
+--- simulator output (vvp) ---
+tb_cosim: answered 4000 ticks (LANES = 32, H = 15); the host sent 0, done
+cosim/tb_cosim.v:180: $finish called at 70520020000 (1ps)
+real 740.64
+user 656.65
+sys 5.18
+run.sh exit status: 0
+################################################################
+# command: grep -E ' (MATCH|MISMATCH) ' sim/cosim/cosim.log | awk '{print $1, $2}' | diff - <(grep -v '^#' sim/returns.txt) && echo ...
+# The RTL returns above against sim/returns.txt, which model/golden.py wrote (2026-10-12 19:34, seed 0, H = 15) when it made the replay vectors.
+no differences: all 20 RTL episode returns equal the ones model/golden.py recorded, digit for digit
+################################################################
+# command: EPISODES=1 LANES=8 PYTHON=<venv python> bash cosim/run.sh   (started 2026-10-12 20:35:11; a quick check that the LANES knob works: 8 lanes, 4 passes per decision)
+Closed-loop co-simulation (DESIGN.md §7.3): gymnasium Pendulum-v1, seed 0, H = 15, 1 episodes x 200 ticks
+RTL: rollout_engine (LANES = 8) in Icarus Verilog, through named pipes; its best_idx picks every applied action
+golden: model/golden.py integer planner; both use the host code in model/planner.py
+
+episode              RTL return           golden return  return    chosen best_idx
+      0     -1.1752364061018081     -1.1752364061018081  MATCH     200/200 equal to golden
+
+decisions made by the RTL: 200 (32 candidates x 15 imagined steps each)
+RTL best_idx and best_cost equal the golden model's on the same inputs: 200/200
+RTL chosen best_idx equal to the golden closed loop's: 200/200
+episode returns identical (float ==): 1/1
+mean return: RTL -1.2, golden -1.2
+clocks per decision (RTL cycles output): 5022..5022
+wall time: RTL closed loop 43.3 s (216.4 ms per decision), golden closed loop 0.1 s
+PASS
+--- simulator output (vvp) ---
+tb_cosim: answered 200 ticks (LANES = 8, H = 15); the host sent 0, done
+cosim/tb_cosim.v:180: $finish called at 11008020000 (1ps)
+real 43.90
+user 39.36
+sys 0.46
+run.sh exit status: 0

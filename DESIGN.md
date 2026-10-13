@@ -210,3 +210,25 @@ and explained.*
     own compiled testbench. Besides the 32 costs, the 32 final states and best_idx/best_cost, the testbench checks:
     `cycles` against its own clock count, that `busy` rises with `start` and falls with `done`, and that `done`
     lasts one clock. A 10,000-clock watchdog turns a hung FSM into a FAIL.
+- **Stage 3, closed-loop co-simulation (2026-10-12).** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
+  Makefile were not touched. These are the details §7.3 left open:
+  - **Files:** `cosim/host.py` (Python: the pendulum, the host planner from `model/planner.py`, the golden
+    reference), `cosim/tb_cosim.v` (Icarus: `rollout_engine` behind two named pipes) and `cosim/run.sh` (compiles,
+    makes the pipes with `mkfifo`, starts the simulator then the host, and always deletes the pipes and stops the
+    simulator when it ends). The compiled testbench, the pipes and the run's log live in `sim/cosim/` (not
+    committed). `make cosim` runs `PYTHON=$(PYTHON) LANES=$(LANES) bash cosim/run.sh`.
+  - **Pipe protocol:** `to_rtl` carries host → RTL and `from_rtl` carries RTL → host, as lines of signed decimal
+    numbers. Both programs open `to_rtl` first and `from_rtl` second, so opening cannot deadlock. The testbench
+    first sends `LANES H`, and the host stops if H differs from its own. Each tick the host sends
+    `1 theta_q omega_q` and then the 32 × H actions in ACT[t][n] order (step outer, candidate inner). The testbench
+    writes them through the normal `act_*` port, one byte per clock as `tb_rollout_engine` does, pulses `start` and
+    answers `best_idx best_cost cycles`. `0` ends the run. No `$fscanf` format ends in whitespace: a trailing `"\n"`
+    makes `$fscanf` wait for the next tick's first character, which the host only sends after this tick's answer
+    (tried in a scratch test: it hangs).
+  - **Reference and checks:** the reference is the golden model's integer-planner closed loop, run inside
+    `host.py` with `golden.int_engine` and `planner.run_episode`, exactly as `golden.py` runs it. PASS needs all
+    of: every episode return equal with float `==`, the RTL's choice equal to golden's at every tick, and every RTL
+    answer (best_idx and best_cost) equal to the golden model's on the same inputs. The last check names the first
+    tick that differs.
+  - **Hangs:** the host gives the simulator 60 s to connect and 60 s per tick (`SIGALRM`), then fails. The
+    testbench keeps the 10,000-clock watchdog and stops with FAIL if the host's input is short or the pipe closes.
