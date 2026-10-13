@@ -1,10 +1,14 @@
-# make test       replay 1,000 recorded planner decisions through the RTL, bit-exact
-# make test-full  all 4,000 decisions (20 closed-loop episodes)
+# make test       replay the first 1,000 recorded planner decisions through the RTL,
+#                 bit-exact. A quick check only: those 1,000 never saturate omega
+#                 and never clamp a hidden value (results/coverage.log).
+# make test-full  all 4,000 decisions (20 closed-loop episodes); 20 of them
+#                 saturate omega and 32 clamp a hidden value
 # make golden     regenerate rom/ and sim/ from the Python golden model
 # make cosim      closed loop: the RTL picks every action of 20 pendulum episodes
 # make mutants    planted bugs (DESIGN.md §7.4): every one must FAIL
 # make sweep      clocks per decision, LANES 8/16/32 x H 5/15 -> results/sweep.log, results/cycles.log
-# make synth      yosys resource report for the 32-lane engine on an ECP5 -> results/synth/
+# make synth      yosys resource report for the 32-lane engine on an ECP5, and the
+#                 source line of each DSP multiplier -> results/synth/
 # make timing     place and route on an ECP5-45F, 3 seeds, LANES 32 and 8 -> results/synth/
 # make clean      delete sim/ (vectors, compiled testbenches, logs)
 #
@@ -67,9 +71,11 @@ sweep: rom/params.vh
 	PYTHON=$(PYTHON) bash perf/sweep.sh
 
 # Resources only (no place and route). Leaves the ~17 MB netlist in sim/.
+# dsp_cells.ys synthesizes again and lists where each DSP multiplier comes from.
 synth: | sim
 	mkdir -p results/synth
 	$(YOSYS) -q -s synth/ecp5.ys
+	$(YOSYS) -q -s synth/dsp_cells.ys
 
 # Synthesis, then place and route with 3 seeds; see synth/timing_ecp5.sh
 timing:

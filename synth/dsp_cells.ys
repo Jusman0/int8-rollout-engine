@@ -1,0 +1,13 @@
+# Which source line each DSP multiplier (MULT18X18D) of the 32-lane engine
+# comes from. results/synth/stat_lanes32.txt counts 33 of them, one more
+# than the 32 lanes; this lists every one with its "src" attribute
+# (file:line.column of the Verilog that made it).
+#
+# Run from the repo root (rom/ and -I. as in synth/ecp5.ys):
+#   yosys -q -s synth/dsp_cells.ys
+# Writes results/synth/dsp_cells_lanes32.txt.
+read_verilog -I. rtl/rollout_lane.v rtl/rollout_engine.v
+chparam -set LANES 32 rollout_engine
+synth_ecp5 -top rollout_engine
+tee -q -o results/synth/dsp_cells_lanes32.txt select -count t:MULT18X18D
+tee -q -a results/synth/dsp_cells_lanes32.txt printattrs t:MULT18X18D

@@ -91,7 +91,8 @@ module rollout_lane #(
     // clock. Adding the three floored terms one at a time gives the same
     // total as adding them all at once. 21 = 16 + 4 + 1, so 21x is two
     // shifts and two adds: no multiplier for the constants (DESIGN.md §4.2).
-    // 20 bits: 21 x 127^2 = 338,709 < 2^19.
+    // 19 bits would be enough: 21 x 127^2 = 338,709 < 2^19 = 524,288
+    // (omega' is saturated to +-127). 20 bits leaves one spare.
     wire [19:0] sq20 = {4'd0, prod};     // a square is never negative
 
     reg [15:0] term;                     // at most 128^2 = 16,384

@@ -9,13 +9,16 @@
 //
 // Each decision is driven the way a host would: write the 32 x H actions
 // one byte per clock through the act_* port, set the state, pulse start,
-// wait for done. A watchdog turns an FSM that never finishes into a FAIL.
+// wait for done. While the engine is busy the testbench changes theta0 and
+// omega0, which the engine must have copied at start. A watchdog turns an
+// FSM that never finishes into a FAIL.
 //
 // Built by the Makefile with
 //   -I$(VEC)                       finds vectors.vh (VEC_COUNT, VEC_H)
 //   -DVEC_DIR='"$(VEC)"'           where the vector files are
 //   -Ptb_rollout_engine.LANES=8    lanes in the engine (default 32)
-// Runs all VEC_COUNT decisions by default; +n=1000 for fewer.
+// Runs all VEC_COUNT decisions by default; +n=1000 for fewer. Asking for
+// 0 decisions, or for more than VEC_COUNT, prints FAIL.
 `timescale 1ns/1ps
 
 `ifndef VEC_DIR
@@ -68,9 +71,12 @@ module tb_rollout_engine;
 
     initial begin
         if (!$value$plusargs("n=%d", n_dec)) n_dec = VEC_COUNT;
-        if (n_dec > VEC_COUNT) begin
-            $display("only %0d decisions in %0s, running those", VEC_COUNT, `VEC_DIR);
-            n_dec = VEC_COUNT;
+        // Running 0 decisions, or fewer than asked for, must not print PASS:
+        // "PASS" has to mean that every decision asked for was checked.
+        if (n_dec < 1 || n_dec > VEC_COUNT) begin
+            $display("FAIL: +n=%0d, but %0s holds %0d decisions (allowed: 1..%0d)",
+                     n_dec, `VEC_DIR, VEC_COUNT, VEC_COUNT);
+            $finish;
         end
         $readmemh({`VEC_DIR, "/vec_state.hex"}, vec_state);
         $readmemh({`VEC_DIR, "/vec_act.hex"},   vec_act);
@@ -100,6 +106,13 @@ module tb_rollout_engine;
             @(negedge clk);
             start  = 1'b0;
             if (!busy) bad_proto = bad_proto + 1;     // busy rises with start
+            // The engine must copy theta0/omega0 when it sees start
+            // (DESIGN.md Changelog, stage 2). Change them now, to the bitwise
+            // inverse of the real state, so a design that keeps reading the
+            // inputs during the decision imagines from the wrong state and
+            // fails the cost and state checks.
+            theta0 = ~vec_state[d][7:0];
+            omega0 = ~vec_state[d][15:8];
 
             // 3. wait for done; waited ends up equal to the clocks from the
             //    edge that saw start to the edge that raised done
@@ -160,9 +173,11 @@ module tb_rollout_engine;
             if (cycles < min_cyc) min_cyc = cycles;
             if (cycles > max_cyc) max_cyc = cycles;
 
+            // the measured state from the vectors (theta0/omega0 were changed above)
             if (d < 3)
                 $display("decision %0d: state (%0d, %0d), best %0d, cost %0d, %0d clocks",
-                         d, $signed(theta0), $signed(omega0), best_idx, best_cost, cycles);
+                         d, $signed(vec_state[d][7:0]), $signed(vec_state[d][15:8]),
+                         best_idx, best_cost, cycles);
         end
 
         $display("clocks in each FSM state, decision 0: INIT %0d, L1 %0d, L2 %0d, COST %0d, STORE %0d, DRAIN %0d, ARG %0d, DONE %0d",

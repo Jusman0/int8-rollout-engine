@@ -83,13 +83,29 @@ module rollout_engine #(
     // operand codes, the same numbers as in rollout_lane
     localparam SRC_THETA = 2'd0, SRC_OMEGA = 2'd1, SRC_U = 2'd2, SRC_H = 2'd3;
 
+    // Simulation-only checks (synthesis skips everything between
+    // translate_off and translate_on, so they cost no hardware).
     // synthesis translate_off
+    // LANES must be 8, 16 or 32, the values that were tested. The other
+    // divisors of 32 (4, 2, 1) were not, and LANES = 4 at H = 15 would need
+    // 8 x (83 x 15 + 2) + 34 = 10,010 clocks, more than the testbenches'
+    // 10,000-clock watchdog allows.
     initial
-        if (N_CAND % LANES != 0 || H < 1 || H > 16 || ACC_W < BIAS_W) begin
+        if (!(LANES == 8 || LANES == 16 || LANES == 32) || N_CAND % LANES != 0 ||
+            H < 1 || H > 16 || ACC_W < BIAS_W) begin
             $display("rollout_engine: unsupported parameters LANES=%0d H=%0d ACC_W=%0d",
                      LANES, H, ACC_W);
             $finish;
         end
+
+    // The host may only write ACT while busy is low (DESIGN.md §6). The
+    // hardware does not block a write during a decision: the lanes would
+    // read the new byte and the decision in flight would be wrong. So a
+    // simulation that breaks the rule says so.
+    always @(posedge clk)
+        if (act_we && busy)
+            $display("rollout_engine: ERROR: act_we while busy (act_t=%0d act_n=%0d)",
+                     act_t, act_n);
     // synthesis translate_on
 
     // ---------------------------------------------------------- memories
