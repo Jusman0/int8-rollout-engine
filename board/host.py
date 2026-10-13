@@ -117,18 +117,30 @@ class Port:
         # O_NONBLOCK: open() must not wait for a modem "carrier" signal
         fd = os.open(path, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         configure_raw(fd, baud)
-        termios.tcflush(fd, termios.TCIOFLUSH)   # drop anything left over from before
+        # opening the port can put a stray byte or glitch on the FPGA's RX line,
+        # and the board may still be answering it: give that time to arrive,
+        # then drop it, so the first command starts clean
+        time.sleep(0.2)
+        termios.tcflush(fd, termios.TCIOFLUSH)
         return cls(fd, path)
 
-    def write(self, data):
+    def write(self, data, timeout=2.0):
+        """All bytes, or ProtocolError if the port stops taking them for `timeout` s."""
         view = memoryview(bytes(data))
+        deadline = time.monotonic() + timeout
         while view:
-            select.select([], [self.fd], [], 1.0)    # wait for room in the driver's buffer
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ProtocolError(f"write timeout: {len(view)} bytes not sent")
+            select.select([], [self.fd], [], left)   # wait for room in the driver's buffer
             try:
                 sent = os.write(self.fd, view)
             except BlockingIOError:
                 continue
+            except OSError as e:                      # e.g. the board was unplugged
+                raise ProtocolError(f"port error: {e}") from e
             view = view[sent:]
+            deadline = time.monotonic() + timeout     # progress: restart the clock
 
     def read_exact(self, n, timeout):
         """Exactly n bytes, or ProtocolError if they take longer than timeout seconds."""
@@ -145,6 +157,8 @@ class Port:
                     chunk = os.read(self.fd, n - len(data))
                 except BlockingIOError:
                     continue
+                except OSError as e:                  # e.g. the board was unplugged
+                    raise ProtocolError(f"port error: {e}") from e
                 if not chunk:
                     raise ProtocolError("the port closed")
                 data += chunk
@@ -180,6 +194,18 @@ def ping(port, timeout):
     if kind != REP_PING:
         raise ProtocolError(f"'P' got reply 0x{kind:02x}, not 'K'")
     return rest[0], rest[1], rest[2]
+
+
+def first_ping(port, timeout, log=None):
+    """The first ping of a session, tried twice. A stray byte while the port
+    opened can leave the board answering 'E' to it; one resync clears that."""
+    try:
+        return ping(port, timeout)
+    except ProtocolError as e:
+        if log:
+            log.say(f"first ping: {e}; resyncing and trying once more")
+        port.resync()
+        return ping(port, timeout)
 
 
 def decide(port, theta_q, omega_q, plans, horizon, timeout):
@@ -236,7 +262,10 @@ def find_port(timeout):
         try:
             port = Port.open_serial(path)
             try:
-                ping(port, min(timeout, 0.5))
+                first_ping(port, min(timeout, 0.5))
+                # next time, skip the search: opening the JTAG side as a serial
+                # port is harmless but slow, and confusing in the logs
+                print(f"board UART found on {path}; pass --port {path} next time", flush=True)
                 return path
             finally:
                 port.close()
@@ -290,9 +319,10 @@ class FakeBoard(threading.Thread):
     UART, computing with the golden model instead of the FPGA. Independent
     of top.v: if host.py and top.v both follow board/README.md, both agree."""
 
-    def __init__(self, fd, lanes, horizon):
+    def __init__(self, fd, lanes, horizon, fail=False):
         super().__init__(daemon=True)            # dies with the host program
         self.fd, self.lanes, self.horizon = fd, lanes, horizon
+        self.fail = fail                         # answer every 'D' with E 3 (tests the host's abort path)
         self.golden = self.p = None
 
     def recv(self, timeout):
@@ -324,7 +354,7 @@ class FakeBoard(threading.Thread):
                     if b is None:
                         break
                     payload.append(b)
-                if len(payload) < 2 + N_CAND * self.horizon:
+                if len(payload) < 2 + N_CAND * self.horizon or self.fail:
                     self.error(3)
                 else:
                     self.send(self.answer(payload))
@@ -374,7 +404,7 @@ class Log:
 # --------------------------------------------------------------- commands --
 
 def cmd_ping(port, args, log):
-    lanes, horizon, version = ping(port, args.timeout)
+    lanes, horizon, version = first_ping(port, args.timeout, log)
     log.say(f"reply: K {lanes} {horizon} {version}   (LANES = {lanes}, H = {horizon}, "
             f"protocol version {version})")
     ok = version == PROTOCOL_VERSION and lanes in (8, 16, 32)
@@ -383,7 +413,7 @@ def cmd_ping(port, args, log):
 
 
 def cmd_replay(port, args, log):
-    lanes, horizon, version = ping(port, args.timeout)
+    lanes, horizon, version = first_ping(port, args.timeout, log)
     vh, decisions = load_vectors(ROOT / "sim", args.n)
     if horizon != vh:
         log.say(f"FAIL: the board has H = {horizon}, the vectors in sim/ have H = {vh}")
@@ -416,16 +446,22 @@ def cmd_replay(port, args, log):
         if (d + 1) % 500 == 0:
             print(f"  {d + 1} decisions ...", flush=True)
     dt = time.monotonic() - t0
-    n = args.n
-    log.say(f"decisions answered: {n - errors}/{n} (protocol errors: {errors})")
-    log.say(f"costs: {n - errors - counts['cost']}/{n} decisions bit-exact (all 32 candidates)")
-    log.say(f"final states: {n - errors - counts['state']}/{n} decisions bit-exact "
+    # count only what really happened: after 5 protocol errors the loop stops
+    # early, and decisions that were never sent must not be reported as passing
+    attempted = d + 1
+    answered = attempted - errors
+    if attempted < args.n:
+        log.say(f"stopped after {attempted} of {args.n} decisions")
+    log.say(f"decisions answered: {answered}/{attempted} sent (protocol errors: {errors})")
+    log.say(f"costs: {answered - counts['cost']}/{answered} answered decisions bit-exact "
+            f"(all 32 candidates)")
+    log.say(f"final states: {answered - counts['state']}/{answered} answered decisions bit-exact "
             f"(all 32 theta and omega)")
-    log.say(f"best_idx and best_cost: {n - errors - counts['best']}/{n} decisions match")
-    log.say(f"cycles = {cyc}: {n - errors - counts['cycles']}/{n} decisions")
+    log.say(f"best_idx and best_cost: {answered - counts['best']}/{answered} answered decisions match")
+    log.say(f"cycles = {cyc}: {answered - counts['cycles']}/{answered} answered decisions")
     # at 115,200 baud a decision's 482 + 167 bytes take 56 ms on the wire alone
-    log.say(f"wall time {dt:.1f} s ({1000 * dt / max(n, 1):.1f} ms per decision)")
-    ok = errors == 0 and not any(counts.values())
+    log.say(f"wall time {dt:.1f} s ({1000 * dt / attempted:.1f} ms per decision sent)")
+    ok = attempted == args.n and errors == 0 and not any(counts.values())
     log.say("PASS" if ok else "FAIL")
     log.say(f"log: {log.path}")
     return ok
@@ -437,7 +473,7 @@ def cmd_loop(port, args, log):
     import golden
     import planner
 
-    lanes, horizon, version = ping(port, args.timeout)
+    lanes, horizon, version = first_ping(port, args.timeout, log)
     cyc = expected_cycles(lanes, horizon)
     ref = {}
     for line in (ROOT / "sim" / "returns.txt").read_text().splitlines():
@@ -505,6 +541,8 @@ def main():
                     help="no hardware: talk to a golden-model fake board over a pty")
     ap.add_argument("--fake-lanes", type=int, default=8, choices=(8, 16, 32),
                     help="LANES the fake board reports (default 8)")
+    ap.add_argument("--fake-fail", action="store_true",
+                    help="the fake board answers every 'D' with E 3 (tests the abort path)")
     ap.add_argument("--timeout", type=float, default=2.0,
                     help="seconds to wait for a reply (default 2)")
     ap.add_argument("--log", help="log file (default board/build/logs/<command>_<time>.log)")
@@ -538,7 +576,7 @@ def main():
         port = Port(slave, f"fake board on {os.ttyname(slave)}")
         horizon = int((ROOT / "sim" / "vectors.vh").read_text().split("VEC_H")[1]
                       .split("=")[1].split(";")[0])
-        FakeBoard(master, args.fake_lanes, horizon).start()
+        FakeBoard(master, args.fake_lanes, horizon, fail=args.fake_fail).start()
     else:
         path = args.port or find_port(args.timeout)
         port = Port.open_serial(path)
