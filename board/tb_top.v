@@ -6,7 +6,11 @@
 //   1. 'P' must answer 'K' LANES H 1
 //   2. an unknown byte must answer 'E' 1 and light the error LED
 //   3. a byte with a bad stop bit must answer 'E' 2
-//   4. a 'D' command that stops halfway must answer 'E' 3 (after the timeout)
+//   4. a 'D' command that stops halfway must answer 'E' 3 (after the timeout);
+//      a bad stop bit in the middle of a 'D', followed by 60 more bytes
+//      ('P', 'D', 'Z'), must answer exactly 'E' 2, and only after the host
+//      has been quiet for the timeout (the rest of a broken command must not
+//      be read as new commands)
 //   5. 'P' again: 'K', and the error LED goes off
 //   6. 'P' sent with the host's baud rate 3% slow, then 3% fast: still 'K';
 //      a glitch on the rx line shorter than half a bit is ignored
@@ -15,6 +19,9 @@
 //      every one of the 167 reply bytes must equal the golden model's, and
 //      the busy probe must be high for exactly the expected clocks
 //   9. no byte arrives that was not expected
+// Running checks the whole time: the host never writes an action byte into
+// the engine while it is busy, and the done probe is exactly 4 clocks wide
+// (stretched so a 24 MHz logic analyzer cannot miss it), once per decision.
 // A watchdog turns any reply that never comes into a FAIL.
 //
 // Built by board/Makefile from the repo root (rom/ and sim/ are found from there):
@@ -119,11 +126,15 @@ module tb_top;
     integer   rx_ferrs   = 0;        // bytes from the board with a bad stop bit
     integer   rx_glitch  = 0;        // falling edges that were not start bits
     integer   rd         = 0;        // bytes checked so far
+    integer   clk_count  = 0;        // clocks since time 0, for timing checks
+    integer   rx_t [0:1023];         // clock at which each received byte's start bit began
+    always @(posedge clk) clk_count = clk_count + 1;
 
     always begin : host_receiver
-        integer   k;
+        integer   k, t_start;
         reg [7:0] b;
         @(negedge board_tx);
+        t_start = clk_count;
         repeat (CPB / 2) @(negedge clk);             // middle of the start bit
         if (board_tx !== 1'b0) begin
             rx_glitch = rx_glitch + 1;
@@ -135,6 +146,7 @@ module tb_top;
             repeat (CPB) @(negedge clk);             // middle of the stop bit
             if (board_tx !== 1'b1) rx_ferrs = rx_ferrs + 1;
             rx_buf[n_rx % 1024] = b;
+            rx_t[n_rx % 1024]   = t_start;
             n_rx = n_rx + 1;
         end
     end
@@ -151,6 +163,26 @@ module tb_top;
             busy_len      = 0;
         end
     end
+
+    // ------------------------------------------------------------ done probe
+    // probe_done is stretched to 4 clocks so the logic analyzer (24 MHz, one
+    // sample per 41.7 ns) cannot miss it: every pulse must be exactly 4 long.
+    integer done_len = 0, done_pulses = 0, bad_done = 0;
+    always @(posedge clk) begin
+        if (probe_done) done_len = done_len + 1;
+        else if (done_len != 0) begin
+            done_pulses = done_pulses + 1;
+            if (done_len != 4) bad_done = bad_done + 1;
+            done_len = 0;
+        end
+    end
+
+    // top.v writes ACT only while the engine is idle (its comments rely on
+    // it). The engine prints an ERROR for a write while busy; count it here so
+    // it fails the test instead of scrolling past.
+    integer act_while_busy = 0;
+    always @(posedge clk)
+        if (dut.u_eng.act_we && dut.u_eng.busy) act_while_busy = act_while_busy + 1;
 
     // ------------------------------------------------------------ checking
     integer bad_bytes = 0;           // reply bytes that differ from the expected
@@ -186,7 +218,7 @@ module tb_top;
         end
     endtask
 
-    integer n_dec, d, t, c, k, errors, bad_dec, bad_busy, bad_mark;
+    integer n_dec, d, t, c, k, errors, bad_dec, bad_busy, bad_mark, quiet_from, e_at;
     reg [7:0] reply [0:REPLY_LEN-1];
 
     initial begin
@@ -242,6 +274,31 @@ module tb_top;
         expect_byte(8'd3,  "timeout", 1);
         $display("errors: unknown byte -> E 1, bad stop bit -> E 2, half a 'D' -> E 3: %0s",
                  bad_bytes == bad_mark ? "all as expected" : "MISMATCH");
+
+        //    a bad stop bit in the middle of a 'D', then 60 more bytes that
+        //    look like commands: the board must treat all of it as one broken
+        //    command, wait until the host has been quiet for TIMEOUT clocks,
+        //    and answer exactly 'E' 2 (anything extra fails step 9)
+        bad_mark = bad_bytes;
+        send_byte(8'h44, 1'b1);
+        send_byte(8'h05, 1'b1);
+        send_byte(8'h06, 1'b1);
+        for (k = 0; k < 3; k = k + 1) send_byte(k, 1'b1);
+        send_byte(8'h33, 1'b0);                      // the bad stop bit
+        for (k = 0; k < 60; k = k + 1)
+            send_byte(k % 3 == 0 ? 8'h50 : k % 3 == 1 ? 8'h44 : 8'h5A, 1'b1);
+        quiet_from = clk_count;                      // the host goes quiet here
+        e_at = rd;                                   // index of the 'E' about to arrive
+        expect_byte(8'h45, "drain", 0);
+        expect_byte(8'd2,  "drain", 1);
+        if (rx_t[e_at % 1024] - quiet_from < TIMEOUT) begin
+            $display("error reply came %0d clocks after the host went quiet, before the %0d-clock timeout",
+                     rx_t[e_at % 1024] - quiet_from, TIMEOUT);
+            errors = errors + 1;
+        end
+        $display("bad stop bit inside a 'D', then 60 command-like bytes -> one E 2 after %0d quiet clocks: %0s",
+                 rx_t[e_at % 1024] - quiet_from,
+                 bad_bytes == bad_mark ? "as expected" : "MISMATCH");
 
         // 5. a good command clears the error LED
         send_byte(8'h50, 1'b1);
@@ -357,11 +414,15 @@ module tb_top;
                  REPLY_LEN, n_dec - bad_dec, n_dec);
         $display("busy probe high for exactly %0d clocks: %0d/%0d decisions",
                  EXP_CYC, n_dec - bad_busy, n_dec);
+        $display("done probe pulses: %0d (expected %0d), not exactly 4 clocks wide: %0d",
+                 done_pulses, n_dec, bad_done);
+        $display("action bytes written while the engine was busy: %0d", act_while_busy);
         $display("bytes received: %0d, checked: %0d; bad stop bits from the board: %0d; glitches: %0d",
                  n_rx, rd, rx_ferrs, rx_glitch);
         if (n_rx != rd) errors = errors + 1;
         if (errors == 0 && bad_dec == 0 && bad_busy == 0 && bad_bytes == 0 &&
-            rx_ferrs == 0 && rx_glitch == 0 && busy_pulses == n_dec)
+            rx_ferrs == 0 && rx_glitch == 0 && busy_pulses == n_dec &&
+            done_pulses == n_dec && bad_done == 0 && act_while_busy == 0)
             $display("PASS");
         else
             $display("FAIL");
