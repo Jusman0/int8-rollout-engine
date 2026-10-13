@@ -1,0 +1,23 @@
+
+5. Printing statistics.
+
+=== rollout_engine ===
+
+        +----------Local Count, excluding submodules.
+        | 
+    13379 wires
+    34671 wire bits
+    13379 public wires
+    34671 public wire bits
+       18 ports
+      129 port bits
+    14411 cells
+       32   $scopeinfo
+     2589   CCU2C
+       18   L6MUX21
+     6706   LUT4
+       33   MULT18X18D
+      962   PFUMX
+      320   TRELLIS_DPR16X4
+     3751   TRELLIS_FF
+

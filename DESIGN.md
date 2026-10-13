@@ -259,3 +259,12 @@ and explained.*
   measured totals and the per-state counts of decision 0: all six match exactly (`results/cycles.log`). These
   200-decision sets contain no h clamp, ω saturation or θ wrap (the H = 15 set has no tie either), so they measure
   clocks, not corner-case coverage; that comes from the 4,000-decision runs and the planted-bug tests.
+- **Stage 3, ECP5 synthesis (2026-10-12).** No rule in §1–§6 was changed and the RTL was not touched. Yosys 0.69
+  and nextpnr-ecp5 0.11.1 (YoWASP builds), LFE5U-45F in the CABGA381 package, LANES = 32 and 8. "Out-of-context"
+  means no pin-constraint (.lpf) file; nextpnr's experimental `--out-of-context` flag was not used, because it also
+  turns off the global clock network. `--freq 50 --timing-allow-fail`, seeds 1–3; the post-route "Max frequency"
+  line (the last one in each log) is the one reported, and the median of the three is the headline. Committed
+  nextpnr logs are trimmed to utilisation plus everything after routing (`synth/timing_ecp5.sh`). Result
+  (`results/synth/summary.txt`): LANES = 32 misses 50 MHz on all three seeds (median 47.49 MHz); LANES = 8 meets
+  it on all three (median 51.54 MHz). The critical path runs from a broadcast register through the operand mux,
+  the unregistered multiplier and the 21/32 shift-and-add into the 24-bit cost adder. Not fixed here.

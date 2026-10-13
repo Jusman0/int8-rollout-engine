@@ -1,0 +1,49 @@
+rollout_engine on a Lattice ECP5-45F (LFE5U-45F, CABGA381).
+Post-route estimate, out-of-context (no pin constraints). Target clock 50 MHz.
+Reproduce from the repo root: YOSYS=yowasp-yosys NEXTPNR=yowasp-nextpnr-ecp5 LANES="32 8" bash synth/timing_ecp5.sh
+  Yosys 0.69 (git sha1 9f75ca1f9, Release, Clang /workspace/YoWASP/yosys/wasi-sdk-33.0-x86_64-linux/share/cmake/../..//bin/clang++ 22.1.0)
+  "yowasp-nextpnr-ecp5" -- Next Generation Place and Route (Version nextpnr-0.11.1)
+
+LANES = 32
+  yosys cells (results/synth/stat_lanes32.txt):
+    LUT4 6706   CCU2C 2589   PFUMX 962   L6MUX21 18
+    TRELLIS_FF 3751   MULT18X18D 33   DP16KD 0   TRELLIS_DPR16X4 320
+  post-route Fmax (target 50 MHz):
+    seed 1: 47.49 MHz (FAIL at 50 MHz)
+    seed 2: 48.94 MHz (FAIL at 50 MHz)
+    seed 3: 47.26 MHz (FAIL at 50 MHz)
+    median: 47.49 MHz
+  nextpnr utilisation (from results/synth/nextpnr_lanes32_s1.log; the same for every seed):
+    Total LUT4s 13804/43848    31%
+    TRELLIS_IO 129/    245    52%
+    DP16KD 0/    108     0%
+    MULT18X18D 33/     72    45%
+    TRELLIS_FF 3751/  43848     8%
+    TRELLIS_COMB 14850/  43848    33%
+    TRELLIS_RAMW 320/   5481     5%
+    (Total LUT4s is before packing: logic + carry-chain + LUTRAM LUT4s. TRELLIS_COMB is after.)
+  clocks per decision at H = 15: 1281
+    (formula (32/LANES)*(83H+2)+34, which matches the measured counts in results/config_sweep.log)
+  one decision at the median Fmax: 1281 / 47.49 MHz = 27.0 us
+
+LANES = 8
+  yosys cells (results/synth/stat_lanes8.txt):
+    LUT4 3368   CCU2C 669   PFUMX 535   L6MUX21 20
+    TRELLIS_FF 2025   MULT18X18D 9   DP16KD 0   TRELLIS_DPR16X4 272
+  post-route Fmax (target 50 MHz):
+    seed 1: 53.53 MHz (PASS at 50 MHz)
+    seed 2: 51.54 MHz (PASS at 50 MHz)
+    seed 3: 51.20 MHz (PASS at 50 MHz)
+    median: 51.54 MHz
+  nextpnr utilisation (from results/synth/nextpnr_lanes8_s1.log; the same for every seed):
+    Total LUT4s 6338/43848    14%
+    TRELLIS_IO 129/    245    52%
+    DP16KD 0/    108     0%
+    MULT18X18D 9/     72    12%
+    TRELLIS_FF 2025/  43848     4%
+    TRELLIS_COMB 6616/  43848    15%
+    TRELLIS_RAMW 272/   5481     4%
+    (Total LUT4s is before packing: logic + carry-chain + LUTRAM LUT4s. TRELLIS_COMB is after.)
+  clocks per decision at H = 15: 5022
+    (formula (32/LANES)*(83H+2)+34, which matches the measured counts in results/config_sweep.log)
+  one decision at the median Fmax: 5022 / 51.54 MHz = 97.4 us

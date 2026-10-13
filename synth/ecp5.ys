@@ -1,0 +1,14 @@
+# Synthesize rollout_engine for a Lattice ECP5 FPGA and report resources.
+#
+# Run from the repo root:  yosys -s synth/ecp5.ys
+# The repo root matters twice: $readmemh opens rom/*.hex relative to the
+# current directory, and -I. lets `include "rom/params.vh" find the shifts
+# (the same -I. the Makefile gives iverilog).
+#
+# This builds the default 32-lane engine. synth/timing_ecp5.sh also builds
+# other lane counts from a copy of this file, made with sed: the lane count
+# is in the chparam line and in the two output file names, nowhere else.
+read_verilog -I. rtl/rollout_lane.v rtl/rollout_engine.v
+chparam -set LANES 32 rollout_engine
+synth_ecp5 -top rollout_engine -json sim/rollout_ecp5_lanes32.json
+tee -o results/synth/stat_lanes32.txt stat
