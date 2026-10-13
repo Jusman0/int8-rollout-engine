@@ -268,3 +268,21 @@ and explained.*
   (`results/synth/summary.txt`): LANES = 32 misses 50 MHz on all three seeds (median 47.49 MHz); LANES = 8 meets
   it on all three (median 51.54 MHz). The critical path runs from a broadcast register through the operand mux,
   the unregistered multiplier and the 21/32 shift-and-add into the 24-bit cost adder. Not fixed here.
+- **Stage 4, integration and documentation (2026-10-12).** No rule in §1–§7 was changed; `rtl/`, `tb/` and `model/`
+  were not touched.
+  - **Makefile:** targets `cosim`, `mutants`, `sweep`, `synth` and `timing` run each stage's script with the command
+    that stage used (the sweep agent proposed the name `perf`; it is `sweep` here). `YOSYS` and `NEXTPNR` pick the
+    tool names. `cosim`, `mutants` and `sweep` depend on `rom/params.vh`, so the ROM matches the model that the
+    Python side folds. Each target was run once at commit c188ae0 and reproduced its committed log: the same 20
+    co-simulation returns, the same mutant table, the same sweep counts (`results/cycles.log` byte-identical), the
+    same `stat_lanes32.txt`, and nextpnr logs identical except the "Router1 time" lines. The logs from the stage-3
+    runs were kept.
+  - **CI:** `.github/workflows/test.yml` runs `make golden && make test-full` on ubuntu-latest with Python 3.14 and
+    Ubuntu's `iverilog` package, which may be older than the Icarus 13.0 behind every log. `make mutants` is left out:
+    it took 294 s (`results/mutants.log`), over the ~3 minute budget. CI has not run yet; nothing is pushed.
+  - **requirements.txt** pins numpy 2.5.4 and gymnasium 1.4.0. cocotb is not used (the co-simulation uses named
+    pipes).
+  - **README:** §0 names the talk "Robotics: the Endgame"; that published title could not be verified, so the
+    README says "his talk at Sequoia AI Ascent 2026". Figures that are only in stage reports, not in a committed log,
+    are left out of the README: the "about 8 clocks per step with 16 multipliers per lane" estimate (never built)
+    and the area savings tried in a scratch copy of the RTL.
