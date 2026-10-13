@@ -1,0 +1,187 @@
+# Configuration sweep: LANES = 32/16/8 x H = 15/5, all through the same RTL and testbench.
+# Each block below is one command's complete output (make echo, vvp output, wall time from /usr/bin/time -p).
+# LANES = 32, H = 15 is in results/test.log (make test) and results/test_full.log (make test-full).
+# These runs and those two ran at the same time, 4 simulations in parallel on a busy machine, so the wall
+# times are slower than one run alone. Clock counts do not depend on that.
+#
+# Summary (copied from the blocks below and from results/test*.log):
+#   LANES  H   decisions  bit-exact (costs / final states / best)  clocks per decision
+#      32  15       1000  1000/1000 / 1000/1000 / 1000/1000        1281..1281   PASS
+#      32  15       4000  4000/4000 / 4000/4000 / 4000/4000        1281..1281   PASS
+#      16  15       1000  1000/1000 / 1000/1000 / 1000/1000        2528..2528   PASS
+#      16  15       4000  4000/4000 / 4000/4000 / 4000/4000        2528..2528   PASS
+#       8  15       1000  1000/1000 / 1000/1000 / 1000/1000        5022..5022   PASS
+#       8  15       4000  4000/4000 / 4000/4000 / 4000/4000        5022..5022   PASS
+#      32   5       4000  4000/4000 / 4000/4000 / 4000/4000        451..451     PASS
+#      16   5       4000  4000/4000 / 4000/4000 / 4000/4000        868..868     PASS
+#       8   5       4000  4000/4000 / 4000/4000 / 4000/4000        1702..1702   PASS
+#   formula: clocks = (32 / LANES) * (83 * H + 2) + 34
+
+################################################################
+# command: python3 model/golden.py --H 5 --out sim/h5   (2026-10-12 19:58:08)
+# H = 5 decision vectors for the runs below. golden.py also rewrites rom/; the contents are identical (same MD5).
+corner cases in these 4000 decisions (640,000 lane-steps): h clamped at 127: 0, theta wraps: 17190, omega saturations: 0, decisions with a tied best cost: 393
+observed |acc1| = 16,360, |acc2| = 3,357
+(1.9 s)
+real 2.16
+user 1.88
+sys 0.08
+################################################################
+# command: make test LANES=16   (started 2026-10-12 19:58:22, Icarus Verilog version 13.0 (stable) (v13_0))
+iverilog -g2005 -Wall -I. -Isim -DVEC_DIR='"sim"' -Ptb_rollout_engine.LANES=16 \
+		-o sim/tb_rollout_engine_l16 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/tb_rollout_engine_l16 +n=1000 | tee sim/tb_l16.log
+decision 0: state (-7, 10), best 30, cost 397, 2528 clocks
+decision 1: state (-6, 11), best 1, cost 323, 2528 clocks
+decision 2: state (-4, 13), best 0, cost 218, 2528 clocks
+clocks in each FSM state, decision 0: INIT 2, L1 1440, L2 960, COST 90, STORE 2, DRAIN 1, ARG 32, DONE 1
+config: LANES = 16, H = 15, vectors from sim
+decisions run: 1000
+costs: 1000/1000 decisions bit-exact (all 32 candidates)
+final states: 1000/1000 decisions bit-exact (all 32 theta and omega)
+best_idx: 1000/1000 decisions match (best_cost too)
+clocks per decision: 2528..2528 (cycles output matches the testbench count on 1000/1000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 30140022000 (1ps)
+ALL TESTS PASSED
+real 142.55
+user 137.65
+sys 0.78
+
+################################################################
+# command: make test-full LANES=16   (started 2026-10-12 20:00:45, Icarus Verilog version 13.0 (stable) (v13_0))
+/Library/Developer/CommandLineTools/usr/bin/make test N=4000
+vvp -n sim/tb_rollout_engine_l16 +n=4000 | tee sim/tb_l16.log
+decision 0: state (-7, 10), best 30, cost 397, 2528 clocks
+decision 1: state (-6, 11), best 1, cost 323, 2528 clocks
+decision 2: state (-4, 13), best 0, cost 218, 2528 clocks
+clocks in each FSM state, decision 0: INIT 2, L1 1440, L2 960, COST 90, STORE 2, DRAIN 1, ARG 32, DONE 1
+config: LANES = 16, H = 15, vectors from sim
+decisions run: 4000
+costs: 4000/4000 decisions bit-exact (all 32 candidates)
+final states: 4000/4000 decisions bit-exact (all 32 theta and omega)
+best_idx: 4000/4000 decisions match (best_cost too)
+clocks per decision: 2528..2528 (cycles output matches the testbench count on 4000/4000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 120560022000 (1ps)
+ALL TESTS PASSED
+real 683.77
+user 614.54
+sys 5.64
+
+################################################################
+# command: make test LANES=8   (started 2026-10-12 19:58:22, Icarus Verilog version 13.0 (stable) (v13_0))
+iverilog -g2005 -Wall -I. -Isim -DVEC_DIR='"sim"' -Ptb_rollout_engine.LANES=8 \
+		-o sim/tb_rollout_engine_l8 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/tb_rollout_engine_l8 +n=1000 | tee sim/tb_l8.log
+decision 0: state (-7, 10), best 30, cost 397, 5022 clocks
+decision 1: state (-6, 11), best 1, cost 323, 5022 clocks
+decision 2: state (-4, 13), best 0, cost 218, 5022 clocks
+clocks in each FSM state, decision 0: INIT 4, L1 2880, L2 1920, COST 180, STORE 4, DRAIN 1, ARG 32, DONE 1
+config: LANES = 8, H = 15, vectors from sim
+decisions run: 1000
+costs: 1000/1000 decisions bit-exact (all 32 candidates)
+final states: 1000/1000 decisions bit-exact (all 32 theta and omega)
+best_idx: 1000/1000 decisions match (best_cost too)
+clocks per decision: 5022..5022 (cycles output matches the testbench count on 1000/1000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 55080022000 (1ps)
+ALL TESTS PASSED
+real 151.14
+user 146.09
+sys 0.78
+
+################################################################
+# command: make test-full LANES=8   (started 2026-10-12 20:00:53, Icarus Verilog version 13.0 (stable) (v13_0))
+/Library/Developer/CommandLineTools/usr/bin/make test N=4000
+vvp -n sim/tb_rollout_engine_l8 +n=4000 | tee sim/tb_l8.log
+decision 0: state (-7, 10), best 30, cost 397, 5022 clocks
+decision 1: state (-6, 11), best 1, cost 323, 5022 clocks
+decision 2: state (-4, 13), best 0, cost 218, 5022 clocks
+clocks in each FSM state, decision 0: INIT 4, L1 2880, L2 1920, COST 180, STORE 4, DRAIN 1, ARG 32, DONE 1
+config: LANES = 8, H = 15, vectors from sim
+decisions run: 4000
+costs: 4000/4000 decisions bit-exact (all 32 candidates)
+final states: 4000/4000 decisions bit-exact (all 32 theta and omega)
+best_idx: 4000/4000 decisions match (best_cost too)
+clocks per decision: 5022..5022 (cycles output matches the testbench count on 4000/4000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 220320022000 (1ps)
+ALL TESTS PASSED
+real 708.00
+user 638.25
+sys 5.76
+
+################################################################
+# command: make test VEC=sim/h5 LANES=32 N=4000   (started 2026-10-12 19:58:22, Icarus Verilog version 13.0 (stable) (v13_0))
+iverilog -g2005 -Wall -I. -Isim/h5 -DVEC_DIR='"sim/h5"' -Ptb_rollout_engine.LANES=32 \
+		-o sim/h5/tb_rollout_engine_l32 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/h5/tb_rollout_engine_l32 +n=4000 | tee sim/h5/tb_l32.log
+decision 0: state (-7, 10), best 9, cost 183, 451 clocks
+decision 1: state (-7, 6), best 25, cost 200, 451 clocks
+decision 2: state (-6, 3), best 22, cost 179, 451 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 240, L2 160, COST 15, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 5, vectors from sim/h5
+decisions run: 4000
+costs: 4000/4000 decisions bit-exact (all 32 candidates)
+final states: 4000/4000 decisions bit-exact (all 32 theta and omega)
+best_idx: 4000/4000 decisions match (best_cost too)
+clocks per decision: 451..451 (cycles output matches the testbench count on 4000/4000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 24680022000 (1ps)
+ALL TESTS PASSED
+real 190.35
+user 182.42
+sys 1.16
+
+################################################################
+# command: make test VEC=sim/h5 LANES=16 N=4000   (started 2026-10-12 20:01:32, Icarus Verilog version 13.0 (stable) (v13_0))
+iverilog -g2005 -Wall -I. -Isim/h5 -DVEC_DIR='"sim/h5"' -Ptb_rollout_engine.LANES=16 \
+		-o sim/h5/tb_rollout_engine_l16 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/h5/tb_rollout_engine_l16 +n=4000 | tee sim/h5/tb_l16.log
+decision 0: state (-7, 10), best 9, cost 183, 868 clocks
+decision 1: state (-7, 6), best 25, cost 200, 868 clocks
+decision 2: state (-6, 3), best 22, cost 179, 868 clocks
+clocks in each FSM state, decision 0: INIT 2, L1 480, L2 320, COST 30, STORE 2, DRAIN 1, ARG 32, DONE 1
+config: LANES = 16, H = 5, vectors from sim/h5
+decisions run: 4000
+costs: 4000/4000 decisions bit-exact (all 32 candidates)
+final states: 4000/4000 decisions bit-exact (all 32 theta and omega)
+best_idx: 4000/4000 decisions match (best_cost too)
+clocks per decision: 868..868 (cycles output matches the testbench count on 4000/4000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 41360022000 (1ps)
+ALL TESTS PASSED
+real 221.43
+user 210.10
+sys 1.66
+
+################################################################
+# command: make test VEC=sim/h5 LANES=8 N=4000   (started 2026-10-12 20:05:14, Icarus Verilog version 13.0 (stable) (v13_0))
+iverilog -g2005 -Wall -I. -Isim/h5 -DVEC_DIR='"sim/h5"' -Ptb_rollout_engine.LANES=8 \
+		-o sim/h5/tb_rollout_engine_l8 rtl/rollout_lane.v rtl/rollout_engine.v tb/tb_rollout_engine.v
+vvp -n sim/h5/tb_rollout_engine_l8 +n=4000 | tee sim/h5/tb_l8.log
+decision 0: state (-7, 10), best 9, cost 183, 1702 clocks
+decision 1: state (-7, 6), best 25, cost 200, 1702 clocks
+decision 2: state (-6, 3), best 22, cost 179, 1702 clocks
+clocks in each FSM state, decision 0: INIT 4, L1 960, L2 640, COST 60, STORE 4, DRAIN 1, ARG 32, DONE 1
+config: LANES = 8, H = 5, vectors from sim/h5
+decisions run: 4000
+costs: 4000/4000 decisions bit-exact (all 32 candidates)
+final states: 4000/4000 decisions bit-exact (all 32 theta and omega)
+best_idx: 4000/4000 decisions match (best_cost too)
+clocks per decision: 1702..1702 (cycles output matches the testbench count on 4000/4000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 74720022000 (1ps)
+ALL TESTS PASSED
+real 283.07
+user 230.19
+sys 3.03
+

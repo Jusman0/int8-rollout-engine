@@ -1,0 +1,22 @@
+################################################################
+# command: make test-full   (started 2026-10-12 20:00:42, Icarus Verilog version 13.0 (stable) (v13_0))
+/Library/Developer/CommandLineTools/usr/bin/make test N=4000
+vvp -n sim/tb_rollout_engine_l32 +n=4000 | tee sim/tb_l32.log
+decision 0: state (-7, 10), best 30, cost 397, 1281 clocks
+decision 1: state (-6, 11), best 1, cost 323, 1281 clocks
+decision 2: state (-4, 13), best 0, cost 218, 1281 clocks
+clocks in each FSM state, decision 0: INIT 1, L1 720, L2 480, COST 45, STORE 1, DRAIN 1, ARG 32, DONE 1
+config: LANES = 32, H = 15, vectors from sim
+decisions run: 4000
+costs: 4000/4000 decisions bit-exact (all 32 candidates)
+final states: 4000/4000 decisions bit-exact (all 32 theta and omega)
+best_idx: 4000/4000 decisions match (best_cost too)
+clocks per decision: 1281..1281 (cycles output matches the testbench count on 4000/4000)
+busy/done protocol errors: 0
+PASS
+tb/tb_rollout_engine.v:185: $finish called at 70680022000 (1ps)
+ALL TESTS PASSED
+real 679.01
+user 609.81
+sys 5.56
+

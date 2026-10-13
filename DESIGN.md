@@ -182,3 +182,31 @@ and explained.*
   - **ROM layout (§6, §7.1):** one int8 weight per line, in broadcast order (`w1.hex` address 3j + i, `w2.hex`
     address 16k + j). Biases are 24-bit two's complement. The shifts are in `rom/params.vh` as `S1`, `S2_0` and
     `S2_1`. The decision-vector format is documented at the top of `model/golden.py`.
+- **Stage 2, RTL and bit-exact testbench (2026-10-12).** No rule in §1–§5 was changed and `model/golden.py` was not
+  touched. One layout change to §6 (the action memory when LANES < 32, below); the rest are details §6 left open:
+  - **Schedule (§6):** an imagined step is exactly 48 (L1) + 32 (L2) + 3 (COST) = 83 clocks, with no overhead clocks.
+    A lane writes a finished dot product back one clock after its last MAC, reading the accumulator while its
+    multiplier already does the next beat: h[j] during neuron j+1's first MAC (h[15] during layer 2's first MAC),
+    θ′ during d_ω's first MAC, ω′ during the θ′² clock. The cost terms go into the cost accumulator one per clock
+    (θ′², then (21·ω′²)>>5, then u²>>11). That is the same total as c_step, because each term is floored on its own.
+  - **Pipeline:** FSM issue → registered broadcast (execute) → write-back, one clock apart. The ROMs and the action
+    memory are read synchronously (address this clock, data next clock).
+  - **Clock count:** `cycles` counts every clock outside IDLE, i.e. from the edge that sees `start` (exclusive) to the
+    edge that raises `done` (inclusive): PASSES·(1 INIT + 83·H + 1 STORE) + 1 DRAIN + 32 ARG + 1 DONE
+    = PASSES·(83·H + 2) + 34, where PASSES = 32 / LANES. DRAIN is the one clock the pipeline costs: the last STORE
+    lands one clock after the FSM issues it, and the argmin must not read the buffer before that.
+  - **Action memory when LANES < 32 (changes §6):** §6 describes one 256-bit word per step. The RTL uses words of
+    LANES×8 bits instead. Word 16·p + t holds candidates p·LANES … p·LANES + LANES − 1 at step t, so each pass reads
+    one word exactly as wide as its lanes. With LANES = 32 this is §6's ACT[t]. The host port is unchanged.
+  - **Result buffer:** after every pass, the lanes' costs and final (θ, ω) are copied into a 32-entry buffer. This also
+    happens when LANES = 32, so there is one code path. It costs 32 × 40 flip-flops. The argmin scan and the dbg port
+    read only this buffer. `dbg_*` are combinational reads. `best_idx`, `best_cost`, `cycles` and `dbg_*` are valid
+    from `done` until the next `start`.
+  - **Inputs and parameters:** `theta0`/`omega0` are copied when `start` is seen. ACT may only be written while
+    `busy` is low. LANES must divide 32 and 1 ≤ H ≤ 16; a simulation-time check enforces both. Besides LANES, N_CAND,
+    H and ACC_W, the engine takes W1_FILE, B1_FILE, W2_FILE and B2_FILE (ROM paths, as in tiny-tensor-core).
+  - **Testbench (§7.2):** `make test VEC=<dir> LANES=<n>` picks the vector directory (the testbench includes
+    `<dir>/vectors.vh` for VEC_COUNT and VEC_H) and the lane count (`iverilog -P`). Each (VEC, LANES) pair gets its
+    own compiled testbench. Besides the 32 costs, the 32 final states and best_idx/best_cost, the testbench checks:
+    `cycles` against its own clock count, that `busy` rises with `start` and falls with `done`, and that `done`
+    lasts one clock. A 10,000-clock watchdog turns a hung FSM into a FAIL.
