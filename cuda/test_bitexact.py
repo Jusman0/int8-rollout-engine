@@ -317,13 +317,13 @@ def main():
         if "first_best" in r:
             print(f"    first wrong best: {r['first_best']}")
         ok = ok and r["ok"]
-    # Each candidate is checked once per kernel that runs its set (two
-    # kernels per set), so the total counts every candidate twice.
+    # Every set runs twice (kernels_for: both kernels at N = 32, two block
+    # sizes of rollout_blocks above), so the total counts every candidate twice.
     total = sum(r["values"] for _, _, r in results)
     recorded = sum(r["values"] for name, _, r in results if name in vec_dirs)
-    print(f"  candidate results compared (cost, theta and omega each), over all sets and both kernels: "
-          f"{total:,} ({sum(want['cost'].size for _, want in sets):,} distinct candidates, each on two "
-          f"kernels; recorded sets {recorded:,}, random sets {total - recorded:,}); "
+    print(f"  candidate results compared (cost, theta and omega each), over all set/kernel runs: "
+          f"{total:,} ({sum(want['cost'].size for _, want in sets):,} distinct candidates, each in two runs; "
+          f"recorded sets {recorded:,}, random sets {total - recorded:,}); "
           f"wrong: {sum(r['bad_values'] for _, _, r in results)}")
 
     # ---- planted bugs ----------------------------------------------------
