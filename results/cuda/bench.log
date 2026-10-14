@@ -1,0 +1,83 @@
+# command: .venv\Scripts\python.exe cuda\bench.py --shared-gpu
+# run on the Windows PC with the RTX 3060; cuda\ files as in commit ff21168 on the Mac, copied with scp, SHA-256 identical
+# --shared-gpu: another Python process (PID 16388), a long-running service, held a GPU context the whole time and was idle at the start, see the utilization line
+CUDA rollout benchmark (cuda/bench.py)
+command: python.exe cuda\bench.py --shared-gpu
+date: 2026-10-13 23:14:50, CPU: AMD Ryzen 7 3700X 8-Core Processor, Windows-11-10.0.26300-SP0
+processes holding a GPU context: 27 (on Windows this includes the desktop and other apps that draw with the GPU); Python ones other than this script: PID 16388 C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\python.exe
+GPU utilization before the run: 0 %
+--shared-gpu: running with the process(es) above resident; utilization was 0 %, so they were idle at the start, but work of theirs could overlap ours
+nvidia-smi before (util, SM clock, memory clock, P-state, temp, power, memory used): 0 %, 210 MHz, 405 MHz, P8, 23, 9.13 W, 2316 MiB
+Python 3.14.3, NumPy 2.5.4, CuPy 14.2.0
+CUDA runtime (CuPy's) 13.2, driver supports CUDA 13.3, NVRTC 13.3, options --std=c++20
+GPU: NVIDIA GeForce RTX 3060, compute capability 86, 28 SMs, warp size 32
+GPU limits: clockRate 1.777 GHz, 1536 threads and 16 blocks per SM, 65,536 registers per SM, driver model WDDM
+kernel rollout_warp: 40 registers per thread, 0 bytes of local memory (spills), 0 bytes shared; with 32-thread blocks the driver fits 16 blocks = 512 threads per SM, 14,336 on the GPU at once
+kernel rollout_blocks: 40 registers per thread, 0 bytes of local memory (spills), 256 bytes shared; with 256-thread blocks the driver fits 6 blocks = 1,536 threads per SM, 43,008 on the GPU at once
+warm-up: 8401 launches of N = 65,536, H = 15 in 0.30 s; nvidia-smi right after: 0 %, 210 MHz, 405 MHz, P8, 23, 8.86 W, 2413 MiB
+
+(a) one decision, N = 32, H = 15
+  rollout_warp:
+    graph: 4.23 us per launch (min 4.21 us); one launch: median 17.31 us (min 8.19 us, 200 launches); 1,000 ordinary launches back to back: 16.75 us per launch
+  rollout_blocks x32 (each with the fill of best_key, a second, tiny kernel):
+    graph: 5.22 us per launch (min 5.21 us); one launch: median 36.86 us (min 34.82 us, 200 launches); 1,000 ordinary launches back to back: 33.54 us per launch
+  setting best_key to 2^64 - 1 on its own, graph: fill() 0.85 us, cudaMemsetAsync 8.39 us per call (why cuda_engine.py uses fill)
+  minimal round trip, host wall time (buffers allocated once): copy 480 action bytes and the state to the GPU, launch rollout_warp, copy best_idx back: median 64.35 us (min 60.50 us, 200 calls)
+  end to end, eng.decide() (what closed_loop.py calls every tick), host wall time: repack the plans, allocate, copy in, launch, copy back 32 costs, 32 final states and the best (5 copies): median 297.35 us (min 289.40 us, 200 calls)
+
+(b) the 4,000 recorded decisions of sim/ (N = 32, H = 15) in one launch of rollout_warp (4,000 blocks of one warp)
+  graph (20 launches): 0.0672 ms per launch = 59,501,143 decisions/s; one launch: median 0.0799 ms (min 0.0788 ms, 100 launches) = 50,080,130 decisions/s
+  end to end, eng.decide_batch(), host wall time: repack and copy 1.92 MB of actions to the GPU, launch, copy back 3 x 512 KB of results: median 4.52 ms (min 4.25 ms, 20 calls) = 885,906 decisions/s; results equal exp_*.hex: yes
+
+(c) one decision, H = 15, N candidates: rollout_blocks, min(N, 256)-thread blocks
+        N blocks       graph  ns/candidate  one launch median
+       32      1     5.13 us        160.32           42.96 us
+      256      1     5.70 us         22.28           35.84 us
+    1,024      4     5.83 us          5.69           35.84 us
+    4,096     16     5.87 us          1.43           35.84 us
+   16,384     64    10.37 us          0.63           40.91 us
+   65,536    256    26.99 us          0.41           65.52 us
+
+(d) imagined steps H, one decision
+  N = 32, rollout_warp:
+      H       graph  one launch median
+      1     1.55 us           23.55 us
+      5     2.24 us           18.42 us
+     15     4.13 us           16.38 us
+     30     7.23 us           19.46 us
+    least-squares line through the 4 graph figures: 0.20 us per imagined step + 1.28 us
+  N = 4,096, rollout_blocks x256:
+      H       graph  one launch median
+      1     2.79 us           35.33 us
+      5     3.48 us           47.10 us
+     15     5.87 us           36.86 us
+     30     9.41 us           39.94 us
+    least-squares line through the 4 graph figures: 0.23 us per imagined step + 2.44 us
+
+nvidia-smi at the end of the GPU part: 73 %, 1957 MHz, 7301 MHz, P2, 29, 62.85 W, 2421 MiB
+GPU time inside the event pairs: 384 ms; wall time spent priming (back-to-back launches before each series): 2.44 s
+
+(e) NumPy golden.int_rollout on the CPU (AMD Ryzen 7 3700X 8-Core Processor), host wall time, the same inputs as above. This is the reference model (int64 arrays, a Python loop over the H steps), not a tuned CPU implementation.
+  (a) N = 32, H = 15: median 673.15 us (min 660.80 us, 200 calls); with golden.argmin_first, as golden.int_engine does: median 716.35 us
+  (b) the 4,000 decisions of sim/, one call after another: 2.81 s = 1,422 decisions/s (median 676.95 us per call)
+  (c) H = 15:        N       median  reps
+                    32      0.67 ms    20
+                   256      1.08 ms    20
+                 1,024      2.74 ms    20
+                 4,096      9.28 ms    20
+                16,384    203.37 ms     5
+                65,536    985.99 ms     5
+  (d) N = 32:    H       median  reps
+                 1     0.051 ms    20
+                 5     0.226 ms    20
+                15     0.664 ms    20
+                30     1.322 ms    20
+  (d) N = 4,096:    H       median  reps
+                 1     0.557 ms    20
+                 5     3.682 ms    20
+                15    11.013 ms    20
+                30    19.478 ms    20
+
+nvidia-smi at the end: 0 %, 210 MHz, 405 MHz, P8, 24, 8.74 W, 2421 MiB
+wall time 15.3 s
+H = 30 is beyond the RTL's limit of H = 16 (act_t is 4 bits); the kernel takes any H, and its int32 cost cannot overflow for any H up to 79,610 (2^31 / 26,975, the largest step cost).

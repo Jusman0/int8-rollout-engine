@@ -1,0 +1,42 @@
+# command: .venv\Scripts\python.exe cuda\closed_loop.py
+# run on the Windows PC with the RTX 3060, in the same command line as bitexact.log and right after it (cmd expanded this time stamp when that line started: 2026-10-13 23:14:20.35); cuda\ files as in commit ff21168 on the Mac, copied with scp, SHA-256 identical
+CUDA closed loop: gymnasium Pendulum-v1, seed 0, H = 15, 20 episodes x 200 ticks
+command: python.exe cuda\closed_loop.py
+Python 3.14.3, NumPy 2.5.4, CuPy 14.2.0
+CUDA runtime (CuPy's) 13.2, driver supports CUDA 13.3, NVRTC 13.3, options --std=c++20
+GPU: NVIDIA GeForce RTX 3060, compute capability 86, 28 SMs, warp size 32
+gymnasium 1.4.0
+GPU: cuda/rollout_kernel.cu (rollout_warp, one launch per tick); its best_idx picks every applied action
+golden: model/golden.py integer planner on this machine; both use model/planner.py
+
+episode              GPU return           golden return  return    chosen best_idx
+      0      -1.221299018501406      -1.221299018501406  MATCH     200/200 equal to golden
+      1      -121.9865803325712      -121.9865803325712  MATCH     200/200 equal to golden
+      2     -1.2629010582419984     -1.2629010582419984  MATCH     200/200 equal to golden
+      3      -1.195406437322094      -1.195406437322094  MATCH     200/200 equal to golden
+      4     -125.71279001626128     -125.71279001626128  MATCH     200/200 equal to golden
+      5     -261.97827023844394     -261.97827023844394  MATCH     200/200 equal to golden
+      6      -128.5668246095173      -128.5668246095173  MATCH     200/200 equal to golden
+      7     -256.95368823994494     -256.95368823994494  MATCH     200/200 equal to golden
+      8     -239.39535538310074     -239.39535538310074  MATCH     200/200 equal to golden
+      9       -1.20332789879226       -1.20332789879226  MATCH     200/200 equal to golden
+     10     -121.23458077095528     -121.23458077095528  MATCH     200/200 equal to golden
+     11     -246.63754309033945     -246.63754309033945  MATCH     200/200 equal to golden
+     12     -127.59366603849493     -127.59366603849493  MATCH     200/200 equal to golden
+     13     -127.52856622612408     -127.52856622612408  MATCH     200/200 equal to golden
+     14     -127.62110860108142     -127.62110860108142  MATCH     200/200 equal to golden
+     15      -128.2835566796876      -128.2835566796876  MATCH     200/200 equal to golden
+     16      -4.328811156055649      -4.328811156055649  MATCH     200/200 equal to golden
+     17       -128.470770083442       -128.470770083442  MATCH     200/200 equal to golden
+     18      -243.6661284460434      -243.6661284460434  MATCH     200/200 equal to golden
+     19     -126.28980447863765     -126.28980447863765  MATCH     200/200 equal to golden
+
+decisions made by the GPU: 4000 (32 candidates x 15 imagined steps each)
+GPU costs, final states, best_idx and best_cost equal golden's on the same inputs: 4000/4000
+GPU chosen best_idx equal to the golden closed loop's: 4000/4000
+episode returns identical (float ==): 20/20
+mean return: GPU -126.1, golden -126.1
+wall time: GPU closed loop 4.67 s (1.167 ms per tick, of which eng.decide 0.346 ms; the rest is the pendulum, the planner and the per-tick golden check), golden closed loop 3.17 s
+GPU returns digit for digit equal to sim/returns.txt (golden.py on this machine): 20/20
+GPU returns digit for digit equal to sim/mac/returns.txt (golden.py on the Mac, the RTL logs' vectors): 2/20
+PASS

@@ -1,0 +1,70 @@
+# command: .venv\Scripts\python.exe cuda\test_bitexact.py --vec sim --vec sim/mac --vec sim/h5
+# run on the Windows PC with the RTX 3060, 2026-10-13 23:14:20.35; cuda\ files as in commit ff21168 on the Mac, copied with scp, SHA-256 identical
+# sim/ and sim/h5/: written on this PC by model/golden.py and golden.py --H 5 --out sim/h5. sim/mac/: the Mac's sim/ vector files, the 4,000 decisions behind results/test_full.log and results/cosim.log
+CUDA bit-exact test: cuda/rollout_kernel.cu against model/golden.py (DESIGN.md section 4)
+command: python.exe cuda\test_bitexact.py --vec sim --vec sim/mac --vec sim/h5
+Python 3.14.3, NumPy 2.5.4, CuPy 14.2.0
+CUDA runtime (CuPy's) 13.2, driver supports CUDA 13.3, NVRTC 13.3, options --std=c++20
+GPU: NVIDIA GeForce RTX 3060, compute capability 86, 28 SMs, warp size 32
+rom/ equals golden.fold(): yes (S1 = 7, S2 = (8, 7), B2 = [-22, -99])
+
+PTX the compiler emitted (counts per kernel):
+  rollout_warp: dp4a.s32.s32 24, shr.s32 19, shr.u32 1, shfl.sync.down 10, ld.const 45, bar.sync 0, atom.global.min.u64 0
+  rollout_blocks: dp4a.s32.s32 24, shr.s32 19, shr.u32 4, shfl.sync.down 20, ld.const 45, bar.sync 1, atom.global.min.u64 1
+
+Recorded decisions (expected values from the exp_*.hex files):
+  sim: 4000 decisions x 32 candidates, H = 15; golden.int_rollout reproduces the file: yes
+    h clamped at 127: 133, theta wraps: 8,052, omega saturations: 228, decisions with a tied best cost: 26
+  sim/mac: 4000 decisions x 32 candidates, H = 15; golden.int_rollout reproduces the file: yes
+    h clamped at 127: 133, theta wraps: 8,052, omega saturations: 228, decisions with a tied best cost: 27
+  sim/h5: 4000 decisions x 32 candidates, H = 5; golden.int_rollout reproduces the file: yes
+    h clamped at 127: 0, theta wraps: 17,190, omega saturations: 0, decisions with a tied best cost: 388
+
+Random decisions (expected values from golden.int_rollout + golden.argmin_first):
+  random N=32 H=15, every plan twice: 1000 decisions x 32 candidates
+    h clamped at 127: 76, theta wraps: 24,138, omega saturations: 34,532, decisions with a tied best cost: 1,000
+  random N=32 H=1: 200 decisions x 32 candidates
+    h clamped at 127: 0, theta wraps: 160, omega saturations: 297, decisions with a tied best cost: 68
+  random N=1024 H=15: 16 decisions x 1024 candidates
+    h clamped at 127: 41, theta wraps: 14,224, omega saturations: 19,010, decisions with a tied best cost: 0
+  random N=1024 H=30: 4 decisions x 1024 candidates
+    h clamped at 127: 16, theta wraps: 5,196, omega saturations: 215, decisions with a tied best cost: 0
+  random N=4096 H=15, every plan 8 times: 4 decisions x 4096 candidates
+    h clamped at 127: 8, theta wraps: 4,640, omega saturations: 2,232, decisions with a tied best cost: 4
+
+Results, one launch per (set, kernel); 'decisions' = all N candidates of a decision equal:
+  sim [rollout_warp]: costs 4000/4000, final states 4000/4000, best_idx and best_cost 4000/4000  PASS
+  sim [rollout_blocks x32]: costs 4000/4000, final states 4000/4000, best_idx and best_cost 4000/4000  PASS
+  sim/mac [rollout_warp]: costs 4000/4000, final states 4000/4000, best_idx and best_cost 4000/4000  PASS
+  sim/mac [rollout_blocks x32]: costs 4000/4000, final states 4000/4000, best_idx and best_cost 4000/4000  PASS
+  sim/h5 [rollout_warp]: costs 4000/4000, final states 4000/4000, best_idx and best_cost 4000/4000  PASS
+  sim/h5 [rollout_blocks x32]: costs 4000/4000, final states 4000/4000, best_idx and best_cost 4000/4000  PASS
+  random N=32 H=15, every plan twice [rollout_warp]: costs 1000/1000, final states 1000/1000, best_idx and best_cost 1000/1000  PASS
+  random N=32 H=15, every plan twice [rollout_blocks x32]: costs 1000/1000, final states 1000/1000, best_idx and best_cost 1000/1000  PASS
+  random N=32 H=1 [rollout_warp]: costs 200/200, final states 200/200, best_idx and best_cost 200/200  PASS
+  random N=32 H=1 [rollout_blocks x32]: costs 200/200, final states 200/200, best_idx and best_cost 200/200  PASS
+  random N=1024 H=15 [rollout_blocks x256]: costs 16/16, final states 16/16, best_idx and best_cost 16/16  PASS
+  random N=1024 H=15 [rollout_blocks x1024]: costs 16/16, final states 16/16, best_idx and best_cost 16/16  PASS
+  random N=1024 H=30 [rollout_blocks x256]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
+  random N=1024 H=30 [rollout_blocks x1024]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
+  random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
+  random N=4096 H=15, every plan 8 times [rollout_blocks x1024]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
+  candidate results compared (cost, theta and omega each): 918,528; wrong: 0
+
+Planted bugs (each must FAIL at least one check above):
+  caught: logical >> instead of arithmetic in all three requantization shifts: 16 of 16 set/kernel runs FAIL
+      first: sim [rollout_warp]: costs 0/4000, final states 0/4000, best 0/4000
+  caught: theta saturates at +-127 instead of wrapping: 16 of 16 set/kernel runs FAIL
+      first: sim [rollout_warp]: costs 3728/4000, final states 3728/4000, best 3762/4000
+  caught: omega wraps instead of saturating: 14 of 16 set/kernel runs FAIL
+      first: sim [rollout_warp]: costs 3980/4000, final states 3980/4000, best 3996/4000
+      still PASS on: sim/h5 [rollout_warp], sim/h5 [rollout_blocks x32]
+  caught: argmin tie-break picks the higher index (the RTL's <= bug): 11 of 16 set/kernel runs FAIL
+      first: sim [rollout_warp]: costs 4000/4000, final states 4000/4000, best 3974/4000
+      still PASS on: random N=1024 H=15 [rollout_blocks x256], random N=1024 H=15 [rollout_blocks x1024], random N=1024 H=30 [rollout_blocks x256], random N=1024 H=30 [rollout_blocks x1024], random N=4096 H=15, every plan 8 times [rollout_blocks x256]
+  caught: argmin tree compares costs only and keeps its own on a tie: 11 of 16 set/kernel runs FAIL
+      first: sim [rollout_warp]: costs 4000/4000, final states 4000/4000, best 3996/4000
+      still PASS on: random N=1024 H=15 [rollout_blocks x256], random N=1024 H=15 [rollout_blocks x1024], random N=1024 H=30 [rollout_blocks x256], random N=1024 H=30 [rollout_blocks x1024], random N=4096 H=15, every plan 8 times [rollout_blocks x256]
+
+(13.1 s)
+PASS

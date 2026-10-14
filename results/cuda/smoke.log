@@ -1,0 +1,11 @@
+# command: .venv\Scripts\python.exe cuda\smoke_test.py --mutants
+# run on the Windows PC with the RTX 3060, 2026-10-13 23:14:11.51; cuda\ files as in commit ff21168 on the Mac, copied with scp, SHA-256 identical
+CuPy 14.2.0, NumPy 2.5.4
+CUDA runtime (CuPy's) 13.2, driver supports CUDA 13.3, NVRTC 13.3
+NVRTC loaded from C:\Users\user\int8-rollout-engine\.venv\Lib\site-packages\nvidia\cu13\bin\x86_64\nvrtc64_130_0.dll (found via site-packages)
+device 0: NVIDIA GeForce RTX 3060, compute capability 86, 28 SMs, warp size 32
+kernel: 256 blocks x 128 threads, 1024 dot products of 512 int8
+checked 32,768 __dp4a partial sums and 1,024 warp totals (range -8,323,072 .. 8,388,608)
+planted bug caught: unsigned __dp4a: bytes read as 0..255, so 0xff is 255, not -1
+planted bug caught: reduction starts at offset 8: lane 0 adds only lanes 0..15
+PASS
