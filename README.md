@@ -148,7 +148,7 @@ In his talk at [Sequoia AI Ascent 2026](https://sequoiacap.com/article/ai-ascent
 - **What int8 costs.** At H = 15 nothing measurable (+0.6, 95% CI −7.7 to +9.6). At H = 5 the int8 planner is 142 worse than the float one, for a reason I haven't found.
 - **The cost is approximated.** The real cost in integer units has weights 0.6587 on ω² and 0.000412 on u². The hardware uses 21/32 = 0.65625 and 1/2048 = 0.000488, so that they're shifts and adds, and each term is rounded down.
 - **One trained model**, seed 0. The planted bugs were run at 32 lanes and H = 15 only, and the `cycles` output leaves out loading the actions (above).
-- CI (`.github/workflows/test.yml`) runs `make golden && make test-full` with Ubuntu's Icarus Verilog package. It hasn't run yet; every log here is from Icarus 13.0 on macOS.
+- CI (`.github/workflows/test.yml`) runs `make golden && make test-full` on Ubuntu with its Icarus Verilog package, and passed on the first push. The logs in `results/` are from Icarus 13.0 on macOS.
 
 ## Run it
 
