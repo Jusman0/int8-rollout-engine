@@ -16,8 +16,8 @@ ways of using them:
   "graph"     100 launches are recorded once into a CUDA graph and then
               replayed with one call, between two events; time / 100. The
               host is not involved between the launches, so this is close
-              to the kernel's own run time (plus the ~1 us the GPU needs to
-              start the next kernel).
+              to the kernel's own run time (plus the GPU's own gap between
+              kernels, which was not measured separately).
   "one launch" an event before and after a single ordinary launch, each
               launch waited for before the next: what one control tick
               sees on the GPU, including the time the driver needs to hand

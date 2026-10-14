@@ -12,9 +12,9 @@ same machine first, exactly as model/golden.py runs it. PASS needs all of:
     that differs, if one does)
 Also printed, not part of PASS: the returns against sim/returns.txt (what
 golden.py wrote on this machine) and, if present, sim/mac/returns.txt
-(written on the Mac that made the RTL logs; the pendulum's float physics
-does not give the same last bits on both machines, so those can differ even
-when every integer decision is right).
+(written on the Mac that made the RTL logs). Those can differ even when every
+integer decision is right: the two machines' episodes already diverge in the
+float pendulum physics (most likely the last bits of sin/cos; not verified).
 
 Run from the repo root on the machine with the GPU:
   .venv\\Scripts\\python.exe cuda\\closed_loop.py       (Windows)
