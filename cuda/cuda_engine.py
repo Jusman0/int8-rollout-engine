@@ -274,14 +274,11 @@ PTX_PATTERNS = [
 ]
 
 
-def ptx_summary(source=None):
+def ptx_text(source=None):
     """Compile the kernel source to PTX, the GPU's virtual assembly language
-    (the step before machine code), and count per kernel the instructions
-    this project is about. A check that __dp4a really became dp4a and that
-    the requantization shifts are arithmetic (shr.s32), not logical (shr.u32).
+    (the step before machine code), with the same options as CudaEngine.
     PTX is not the final machine code (SASS): the driver's assembler still
-    translates it, and with no CUDA Toolkit here there is no disassembler.
-    Returns {kernel name: {pattern: count}}."""
+    translates it, and with no CUDA Toolkit here there is no disassembler."""
     nv = cp.cuda.nvrtc
     if source is None:
         source = KERNEL_PATH.read_text(encoding="utf-8")
@@ -292,12 +289,40 @@ def ptx_summary(source=None):
         ptx = nv.getPTX(prog)
     finally:
         nv.destroyProgram(prog)
-    ptx = ptx.decode() if isinstance(ptx, bytes) else ptx
+    return ptx.decode().rstrip("\0") if isinstance(ptx, bytes) else ptx
+
+
+def ptx_summary(source=None):
+    """Count per kernel the PTX instructions this project is about: a check
+    that __dp4a really became dp4a and that the requantization shifts are
+    arithmetic (shr.s32), not logical (shr.u32), and the number of PTX
+    instructions in the loop over the H imagined steps.
+    Returns {kernel name: {pattern: count}}."""
+    ptx = ptx_text(source)
     out = {}
     for body in ptx.split(".entry ")[1:]:
         name = body.split("(", 1)[0].strip()
         out[name] = {pat: body.count(pat) for pat, _ in PTX_PATTERNS}
+        out[name]["step loop"] = step_loop_length(body)
     return out
+
+
+def step_loop_length(body):
+    """PTX instructions between the label after '.pragma "nounroll"' (the
+    step loop of '#pragma unroll 1') and the loop's branch back to it."""
+    lines = [ln.strip() for ln in body.splitlines()]
+    try:
+        start = lines.index('.pragma "nounroll";')
+    except ValueError:
+        return None
+    label = lines[start - 1].rstrip(":")
+    count = 0
+    for ln in lines[start + 1:]:
+        if ln and not ln.startswith("//"):
+            count += 1
+        if ln.startswith("@") and ln.endswith(label + ";"):
+            return count
+    return None
 
 
 def versions():

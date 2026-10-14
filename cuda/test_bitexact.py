@@ -187,6 +187,8 @@ def main():
     ap.add_argument("--vec", action="append", default=None,
                     help="vector directory, relative to the repo root (repeatable; default sim and sim/h5)")
     ap.add_argument("--no-mutants", action="store_true", help="skip the planted-bug runs")
+    ap.add_argument("--save-ptx", default=None,
+                    help="also write the kernels' PTX to this file (relative to the repo root)")
     args = ap.parse_args()
     vec_dirs = args.vec or ["sim", "sim/h5"]
     t_start = time.time()
@@ -208,9 +210,13 @@ def main():
         print("FAIL")
         return 1
 
-    print("\nPTX the compiler emitted (counts per kernel):")
+    print("\nPTX the compiler emitted (counts per kernel; 'step loop' = PTX instructions in the loop "
+          "over the H imagined steps, its branch included):")
     for kname, counts in cuda_engine.ptx_summary().items():
         print(f"  {kname}: " + ", ".join(f"{pat} {n}" for pat, n in counts.items()))
+    if args.save_ptx:
+        (ROOT / args.save_ptx).write_text(cuda_engine.ptx_text(), encoding="utf-8", newline="\n")
+        print(f"  wrote the PTX to {args.save_ptx}")
 
     # ---- the sets ----------------------------------------------------
     sets = []
