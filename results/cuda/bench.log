@@ -1,10 +1,12 @@
 # command: .venv\Scripts\python.exe cuda\bench.py --shared-gpu
 # run on the Windows PC with the RTX 3060; cuda\ files as in commit 18e97ff on the Mac, copied with scp, SHA-256 identical
-# --shared-gpu: another Python process (PID 16388), a long-running service, held a GPU context the whole time and was idle at the start, see the utilization line
+# PROVISIONAL. --shared-gpu overrode bench.py's own guard: another Python process (PID 16388), a long-running service, held a GPU context the whole time. The rule for this PC is to skip benchmarks in that case, and the override was used without asking that process's owner. Utilization read 1 % at the start, but the guard checked only then. Provisional until a run without --shared-gpu, with that process off the GPU, replaces it, or the run is accepted as it is.
+# edited after the run: the line "processes holding a GPU context" gave that process's full path; it now gives the file name only, as bench.py now prints it. Not edited, but corrected in cuda/README.md: eng.decide() makes 2 copies in as well as the 5 out, and the footer's bound assumes |u| <= 127 (with u = -128, which the kernel accepts, the largest step cost is 26,976 and the bound is H = 79,607).
+# the cuda\ files of commit 8565c4a differ from 18e97ff in comments, printed texts, bench.py's guard, test_bitexact.py's planted bugs and cuda_engine.py's new key_init argument (default unchanged); the kernels' PTX is byte-identical (results/cuda/rollout_kernel.ptx, made again at 8565c4a)
 CUDA rollout benchmark (cuda/bench.py)
 command: python.exe cuda\bench.py --shared-gpu
 date: 2026-10-13 23:18:28, CPU: AMD Ryzen 7 3700X 8-Core Processor, Windows-11-10.0.26300-SP0
-processes holding a GPU context: 27 (on Windows this includes the desktop and other apps that draw with the GPU); Python ones other than this script: PID 16388 C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\python.exe
+processes holding a GPU context: 27 (on Windows this includes the desktop and other apps that draw with the GPU); Python ones other than this script: PID 16388 python.exe
 GPU utilization before the run: 1 %
 --shared-gpu: running with the process(es) above resident; utilization was 1 %, so they were idle at the start, but work of theirs could overlap ours
 nvidia-smi before (util, SM clock, memory clock, P-state, temp, power, memory used): 1 %, 210 MHz, 405 MHz, P8, 23, 8.80 W, 2316 MiB

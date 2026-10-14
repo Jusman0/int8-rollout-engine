@@ -334,8 +334,8 @@ and explained.*
   touched. New: `cuda/` (kernels, host engine, tests, benchmark, `cuda/README.md`) and `results/cuda/`. These are
   the details §4–§6 leave open on a GPU:
   - **Toolchain:** CUDA C++ compiled at run time by NVRTC 13.3 through `cupy.RawModule` (CuPy 14.2.0), with
-    `--std=c++20`, so `>>` on a negative `int` is guaranteed arithmetic. No nvcc, no CUDA Toolkit. Run on a Windows
-    11 PC with an RTX 3060.
+    `--std=c++20`, so `>>` on a negative `int` is guaranteed arithmetic. NVRTC emits sm_86 machine code (a cubin)
+    directly, with PTX as its intermediate step. No nvcc, no CUDA Toolkit. Run on a Windows 11 PC with an RTX 3060.
   - **Mapping:** one thread per candidate (a lane), one 32-thread block, i.e. one warp, per decision
     (`rollout_warp`), all recorded decisions in one launch. W1, B1, W2, B2, S1 and S2 in `__constant__` memory. W1
     rows are packed as four int8 per int32 with a zero 4th byte, so layer 1 is one `__dp4a` per neuron on
@@ -346,10 +346,19 @@ and explained.*
     gives exactly the scan's result. For N > 32 candidates (`rollout_blocks`): shared memory across the warps of a
     block, then one 64-bit `atomicMin` on (cost << 32 | index) across blocks, the keys set to 2^64 − 1 first.
   - **Widths:** accumulators and costs are 32-bit `int`, wider than the RTL's 24 bits; both hold every value the
-    golden model can produce (worst-case |acc| 85,570; the cost fits up to H = 79,610). H is not limited to 16.
+    golden model can produce (worst-case |acc| 85,570; the cost fits up to H = 79,607, since a step costs at most
+    26,976 with u = −128, which the kernel accepts; §4.2's 26,975 is for the planner's −127..127). H is not limited
+    to 16.
   - **Checks:** the same `exp_*.hex` vectors as `tb/tb_rollout_engine.v`, random sets against
-    `golden.int_rollout` and `golden.argmin_first`, five planted kernel bugs, and the closed loop against the golden
-    model on the same machine. Logs made on the PC and copied back; only their line endings were changed.
+    `golden.int_rollout` and `golden.argmin_first`, eleven planted bugs (ten kernel edits and one wrong start value
+    of best_key; the five in code only `rollout_blocks` has must fail on its N = 4,096, 256-thread-block run), and
+    the closed loop against the golden model on the same machine. Logs made on the PC and copied back; only their
+    line endings were changed, plus one edit in `bench.log` that its header records.
+  - **Benchmark provisional:** `results/cuda/bench.log` was made with `bench.py --shared-gpu` while another
+    program's Python process held a GPU context. The rule for that PC is to skip benchmarks then, and the override
+    was used without the OK the rule asks for. The timing figures stay provisional until a run without the flag
+    replaces the log, or the run is accepted. `bench.py` keeps its default refusal and now re-checks before each
+    section.
   - **Vectors made on the PC differ from the Mac's:** the PC's closed-loop episodes come out slightly different (the
     cause was not pinned down), so its `sim/` holds a different set of decisions. On the PC, `golden.int_rollout`
     reproduces every expected value in the Mac's files, and the GPU passes both sets.

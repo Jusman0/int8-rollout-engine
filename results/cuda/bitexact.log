@@ -1,5 +1,5 @@
 # command: .venv\Scripts\python.exe cuda\test_bitexact.py --vec sim --vec sim/mac --vec sim/h5 --save-ptx results/cuda/rollout_kernel.ptx
-# run on the Windows PC with the RTX 3060, 2026-10-13 23:18:00.71; cuda\ files as in commit 18e97ff on the Mac, copied with scp, SHA-256 identical
+# run on the Windows PC with the RTX 3060, 2026-10-13 23:50:33.71; cuda\ files as in commit 8565c4a on the Mac, copied with scp, SHA-256 identical
 # sim/ and sim/h5/: written on this PC by model/golden.py and golden.py --H 5 --out sim/h5. sim/mac/: the Mac's sim/ vector files, the 4,000 decisions behind results/test_full.log and results/cosim.log
 CUDA bit-exact test: cuda/rollout_kernel.cu against model/golden.py (DESIGN.md section 4)
 command: python.exe cuda\test_bitexact.py --vec sim --vec sim/mac --vec sim/h5 --save-ptx results/cuda/rollout_kernel.ptx
@@ -50,9 +50,9 @@ Results, one launch per (set, kernel); 'decisions' = all N candidates of a decis
   random N=1024 H=30 [rollout_blocks x1024]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
   random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
   random N=4096 H=15, every plan 8 times [rollout_blocks x1024]: costs 4/4, final states 4/4, best_idx and best_cost 4/4  PASS
-  candidate results compared (cost, theta and omega each): 918,528; wrong: 0
+  candidate results compared (cost, theta and omega each), over all set/kernel runs: 918,528 (459,264 distinct candidates, each in two runs; recorded sets 768,000, random sets 150,528); wrong: 0
 
-Planted bugs (each must FAIL at least one check above):
+Planted bugs (each must FAIL at least one check above; where a run is named, that run):
   caught: logical >> instead of arithmetic in all three requantization shifts: 16 of 16 set/kernel runs FAIL
       first: sim [rollout_warp]: costs 0/4000, final states 0/4000, best 0/4000
   caught: theta saturates at +-127 instead of wrapping: 16 of 16 set/kernel runs FAIL
@@ -60,12 +60,30 @@ Planted bugs (each must FAIL at least one check above):
   caught: omega wraps instead of saturating: 14 of 16 set/kernel runs FAIL
       first: sim [rollout_warp]: costs 3980/4000, final states 3980/4000, best 3996/4000
       still PASS on: sim/h5 [rollout_warp], sim/h5 [rollout_blocks x32]
+  caught: h clamped at 255 instead of 127 (h = 128..255 is a negative signed byte to layer 2's __dp4a): 12 of 16 set/kernel runs FAIL
+      first: sim [rollout_warp]: costs 3968/4000, final states 3968/4000, best 3993/4000
+      still PASS on: sim/h5 [rollout_warp], sim/h5 [rollout_blocks x32], random N=32 H=1 [rollout_warp], random N=32 H=1 [rollout_blocks x32]
   caught: argmin tie-break picks the higher index (the RTL's <= bug): 11 of 16 set/kernel runs FAIL
       first: sim [rollout_warp]: costs 4000/4000, final states 4000/4000, best 3974/4000
       still PASS on: random N=1024 H=15 [rollout_blocks x256], random N=1024 H=15 [rollout_blocks x1024], random N=1024 H=30 [rollout_blocks x256], random N=1024 H=30 [rollout_blocks x1024], random N=4096 H=15, every plan 8 times [rollout_blocks x256]
   caught: argmin tree compares costs only and keeps its own on a tie: 11 of 16 set/kernel runs FAIL
       first: sim [rollout_warp]: costs 4000/4000, final states 4000/4000, best 3996/4000
       still PASS on: random N=1024 H=15 [rollout_blocks x256], random N=1024 H=15 [rollout_blocks x1024], random N=1024 H=30 [rollout_blocks x256], random N=1024 H=30 [rollout_blocks x1024], random N=4096 H=15, every plan 8 times [rollout_blocks x256]
+  caught: level 2 (shared memory) reads only warp 0's winner: 6 of 16 set/kernel runs FAIL; must FAIL on random N=4096 H=15, every plan 8 times [rollout_blocks x256]: yes
+      on: random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best 0/4
+      still PASS on: sim [rollout_warp], sim [rollout_blocks x32], sim/mac [rollout_warp], sim/mac [rollout_blocks x32], sim/h5 [rollout_warp], sim/h5 [rollout_blocks x32], random N=32 H=15, every plan twice [rollout_warp], random N=32 H=15, every plan twice [rollout_blocks x32], random N=32 H=1 [rollout_warp], random N=32 H=1 [rollout_blocks x32]
+  caught: level 2: lanes with no warp winner to read get cost 0 instead of 0x7fffffff: 8 of 16 set/kernel runs FAIL; must FAIL on random N=4096 H=15, every plan 8 times [rollout_blocks x256]: yes
+      on: random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best 0/4
+      still PASS on: sim [rollout_warp], sim/mac [rollout_warp], sim/h5 [rollout_warp], random N=32 H=15, every plan twice [rollout_warp], random N=32 H=1 [rollout_warp], random N=1024 H=15 [rollout_blocks x1024], random N=1024 H=30 [rollout_blocks x1024], random N=4096 H=15, every plan 8 times [rollout_blocks x1024]
+  caught: level 3: atomicMin key with the index in the high half, (idx << 32) | cost: 11 of 16 set/kernel runs FAIL; must FAIL on random N=4096 H=15, every plan 8 times [rollout_blocks x256]: yes
+      on: random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best 0/4
+      still PASS on: sim [rollout_warp], sim/mac [rollout_warp], sim/h5 [rollout_warp], random N=32 H=15, every plan twice [rollout_warp], random N=32 H=1 [rollout_warp]
+  caught: level 3: atomicMin key without the index, cost << 32 only: 11 of 16 set/kernel runs FAIL; must FAIL on random N=4096 H=15, every plan 8 times [rollout_blocks x256]: yes
+      on: random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best 0/4
+      still PASS on: sim [rollout_warp], sim/mac [rollout_warp], sim/h5 [rollout_warp], random N=32 H=15, every plan twice [rollout_warp], random N=32 H=1 [rollout_warp]
+  caught: best_key starts at 0 instead of 2^64 - 1 (a memset of 0x00 instead of 0xff): no atomicMin can lower it: 11 of 16 set/kernel runs FAIL; must FAIL on random N=4096 H=15, every plan 8 times [rollout_blocks x256]: yes
+      on: random N=4096 H=15, every plan 8 times [rollout_blocks x256]: costs 4/4, final states 4/4, best 0/4
+      still PASS on: sim [rollout_warp], sim/mac [rollout_warp], sim/h5 [rollout_warp], random N=32 H=15, every plan twice [rollout_warp], random N=32 H=1 [rollout_warp]
 
-(12.5 s)
+(12.7 s)
 PASS
