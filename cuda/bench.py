@@ -35,21 +35,27 @@ samples it; it is not a lock). Readings between series are printed too.
 
 Before anything touches the GPU, the script lists the processes that hold a
 GPU context and the GPU's utilization. If the GPU is busy (utilization above
---max-util) it stops. If another Python process holds a context (on the
-machine these logs come from, a long-running service may), it also stops,
-unless --shared-gpu is given. A run keeps the GPU busy with short kernels
-(the longest, 4,000 decisions in one launch, takes under 0.1 ms, and a graph
-replays at most 100 launches, a few ms) for about 6 s in total, most of it
-priming and clock sampling; the footer prints the totals.
+--max-util) it stops. If another Python process holds a context, it also
+stops (exit code 2): this refusal is on purpose, because the GPU may belong
+to someone else's work. --shared-gpu overrides it; use it only with the OK
+of whoever runs that process. Before each later section the script looks at
+the GPU's processes again and stops if a Python process has appeared that
+was not there at the start (it cannot tell whether a process that was
+already there has started working). A run keeps the GPU busy with short
+kernels (the longest, 4,000 decisions in one launch, takes under 0.1 ms, and
+a graph replays at most 100 launches, a few ms) for about 6 s in total, most
+of it priming and clock sampling; the footer prints the totals.
 
 Run from the repo root on the machine with the GPU:
   .venv\\Scripts\\python.exe cuda\\bench.py        (Windows)
   python3 cuda/bench.py                           (Linux)
+Exit code 0 after a full run, 2 if it refused or stopped because of the GPU.
 """
 
 import argparse
 import os
 import platform
+import re
 import statistics
 import subprocess
 import sys
@@ -95,25 +101,50 @@ def compute_apps():
     return out
 
 
+def other_pythons():
+    """{pid: file name} of the Python processes other than this script that
+    hold a GPU context. Only the file name of the executable is kept (no
+    folders), so a log never records where other programs live."""
+    return {pid: re.split(r"[\\/]", name)[-1] for pid, name in compute_apps()
+            if "python" in name.lower() and pid != os.getpid()}
+
+
+def describe(pythons):
+    return ", ".join(f"PID {pid} {name}" for pid, name in sorted(pythons.items())) or "none"
+
+
 def guard(args):
-    """Stop before touching the GPU if someone else is using it."""
+    """Stop before touching the GPU if someone else is using it. Returns
+    the Python processes that were accepted (only with --shared-gpu)."""
     apps = compute_apps()
     util = int(nvidia_smi("--query-gpu=utilization.gpu", "--format=csv,noheader,nounits").split()[0])
-    pythons = [(pid, name) for pid, name in apps if "python" in name.lower() and pid != os.getpid()]
+    pythons = other_pythons()
     print(f"processes holding a GPU context: {len(apps)} (on Windows this includes the desktop and "
-          f"other apps that draw with the GPU); Python ones other than this script: "
-          + (", ".join(f"PID {pid} {name}" for pid, name in pythons) or "none"))
+          f"other apps that draw with the GPU); Python ones other than this script: {describe(pythons)}")
     print(f"GPU utilization before the run: {util} %")
     if util > args.max_util:
         print(f"GPU busy ({util} % > {args.max_util} %): not benchmarking")
         sys.exit(2)
     if pythons and not args.shared_gpu:
-        print("another Python process holds a GPU context: not benchmarking "
-              "(--shared-gpu runs this light benchmark anyway)")
+        print("another Python process holds a GPU context: not benchmarking. This refusal is on purpose; "
+              "--shared-gpu overrides it, and is only for when whoever runs that process has said yes.")
         sys.exit(2)
     if pythons:
         print(f"--shared-gpu: running with the process(es) above resident; utilization was {util} %, "
               "so they were idle at the start, but work of theirs could overlap ours")
+    return pythons
+
+
+def recheck(accepted, before):
+    """Before each section: stop if a Python process holds a GPU context
+    that was not accepted at the start. (Utilization can't tell us more here:
+    nvidia-smi averages it over up to a second, which includes our own
+    work.)"""
+    new = {pid: name for pid, name in other_pythons().items() if pid not in accepted}
+    print(f"  [GPU check before {before}: new Python processes on the GPU: {describe(new)}]")
+    if new:
+        print("another Python process now holds a GPU context: stopping the benchmark here")
+        sys.exit(2)
 
 
 def cpu_name():
@@ -263,7 +294,8 @@ def random_decision(rng, n_cand, horizon):
 def main():
     ap = argparse.ArgumentParser(description="CUDA-event timing of the rollout kernels")
     ap.add_argument("--shared-gpu", action="store_true",
-                    help="run even if another Python process holds a GPU context")
+                    help="run even if another Python process holds a GPU context; only with the OK of "
+                         "whoever runs that process (the default refuses on purpose)")
     ap.add_argument("--max-util", type=int, default=10,
                     help="stop if GPU utilization is above this percentage (default 10)")
     args = ap.parse_args()
@@ -272,7 +304,7 @@ def main():
     print("CUDA rollout benchmark (cuda/bench.py)")
     print("command: " + " ".join([Path(sys.executable).name] + sys.argv))
     print(time.strftime("date: %Y-%m-%d %H:%M:%S") + f", CPU: {cpu_name()}, {platform.platform()}")
-    guard(args)
+    accepted = guard(args)
     print("nvidia-smi before (util, SM clock, memory clock, P-state, temp, power, memory used): "
           + gpu_state())
 
@@ -312,6 +344,7 @@ def main():
 
     # ---- (a) ------------------------------------------------------------
     print("\n(a) one decision, N = 32, H = 15")
+    recheck(accepted, "(a)")
     work["a"] = th, om, plans = random_decision(rng, 32, 15)
     db = cuda_engine.DeviceBatch(th, om, plans)
     for label, kernel, threads in (("rollout_warp", "warp", None), ("rollout_blocks x32", "blocks", 32)):
@@ -348,12 +381,13 @@ def main():
     prime(lambda: eng.decide(int(th[0]), int(om[0]), plans[0]))
     t = wall_ms(lambda: eng.decide(int(th[0]), int(om[0]), plans[0]), reps=200, warmup=0)
     print(f"  end to end, eng.decide() (what closed_loop.py calls every tick), host wall time: repack the "
-          f"plans, allocate, copy in, launch, copy back 32 costs, 32 final states and the best "
-          f"(5 copies): median {us(med(t))} (min {us(min(t))}, 200 calls)")
+          f"plans, allocate, copy in (2 copies: actions, state), launch, copy back 32 costs, 32 final "
+          f"states and the best (5 copies), 7 copies in all: median {us(med(t))} (min {us(min(t))}, 200 calls)")
 
     # ---- (b) ------------------------------------------------------------
     print("\n(b) the 4,000 recorded decisions of sim/ (N = 32, H = 15) in one launch of rollout_warp "
           "(4,000 blocks of one warp)")
+    recheck(accepted, "(b)")
     v = test_bitexact.load_vectors(ROOT / "sim")
     db4k = cuda_engine.DeviceBatch(v["theta0"], v["omega0"], v["plans"])
     g = graph_ms(lambda: eng.launch(db4k, "warp"), reps=20, k=20)
@@ -372,7 +406,9 @@ def main():
 
     # ---- (c) ------------------------------------------------------------
     sizes = (32, 256, 1024, 4096, 16384, 65536)
-    print("\n(c) one decision, H = 15, N candidates: rollout_blocks, min(N, 256)-thread blocks")
+    print("\n(c) one decision, H = 15, N candidates: rollout_blocks, min(N, 256)-thread blocks, "
+          "each launch with the fill of best_key (a second, tiny kernel)")
+    recheck(accepted, "(c)")
     print(f"  {'N':>7} {'blocks':>6} {'graph':>11} {'ns/candidate':>13} {'one launch median':>18}"
           f"   nvidia-smi while the graph replayed")
     for n in sizes:
@@ -387,8 +423,9 @@ def main():
 
     # ---- (d) ------------------------------------------------------------
     print("\n(d) imagined steps H, one decision")
+    recheck(accepted, "(d)")
     for n, kernel in ((32, "warp"), (4096, "blocks")):
-        label = "rollout_warp" if kernel == "warp" else "rollout_blocks x256"
+        label = "rollout_warp" if kernel == "warp" else "rollout_blocks x256, with the fill of best_key"
         print(f"  N = {n:,}, {label}:")
         print(f"    {'H':>3} {'graph':>11} {'one launch median':>18}   nvidia-smi while the graph replayed")
         meds = []
@@ -442,7 +479,8 @@ def main():
     print(f"\nnvidia-smi at the end: {gpu_state()}")
     print(f"wall time {time.perf_counter() - t_start:.1f} s")
     print("H = 30 is beyond the RTL's limit of H = 16 (act_t is 4 bits); the kernel takes any H, and its "
-          "int32 cost cannot overflow for any H up to 79,610 (2^31 / 26,975, the largest step cost).")
+          "int32 cost cannot overflow for any H up to 79,607 (2^31 / 26,976, the largest step cost, "
+          "with u = -128).")
 
 
 if __name__ == "__main__":
