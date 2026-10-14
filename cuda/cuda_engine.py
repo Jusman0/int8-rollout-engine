@@ -167,15 +167,19 @@ class CudaEngine:
 
     source: kernel source text (default: cuda/rollout_kernel.cu). The tests
     pass edited copies to check that planted bugs are caught.
+    key_init: what rollout_blocks' best_key starts at (default KEY_INIT,
+    2^64 - 1). Only test_bitexact.py's planted host bug changes it.
     """
 
-    def __init__(self, rom_dir=ROOT / "rom", source=None):
+    def __init__(self, rom_dir=ROOT / "rom", source=None, key_init=KEY_INIT):
         self.rom = load_rom(rom_dir)
         if source is None:
             source = KERNEL_PATH.read_text(encoding="utf-8")
         self.source = source
-        # NVRTC compiles the source for this GPU (sm_86 machine code on an RTX
-        # 3060); CuPy caches the result on disk, keyed by source and options.
+        self.key_init = np.uint64(key_init)
+        # NVRTC compiles the source straight to machine code for this GPU (a
+        # cubin for sm_86 on an RTX 3060, PTX being only its intermediate
+        # step); CuPy caches the cubin on disk, keyed by source and options.
         self.module = cp.RawModule(code=source, options=NVRTC_OPTIONS)
         self.k_warp = self.module.get_function("rollout_warp")
         self.k_blocks = self.module.get_function("rollout_blocks")
@@ -223,11 +227,11 @@ class CudaEngine:
             threads = threads or choose_threads(db.N)
             assert threads % WARP == 0 and 0 < threads <= 1024 and db.N % threads == 0
             assert db.D <= 65535, "gridDim.y limit"
-            # every key starts at 2^64 - 1, above any real key. fill() runs a
-            # tiny CuPy kernel on the same stream, so it is done before ours
-            # starts. (A cudaMemsetAsync of 0xff bytes would do the same job;
-            # results/cuda/bench.log compares the two.)
-            db.best_key.fill(KEY_INIT)
+            # every key starts at key_init, 2^64 - 1, above any real key.
+            # fill() runs a tiny CuPy kernel on the same stream, so it is done
+            # before ours starts. (A cudaMemsetAsync of 0xff bytes would do the
+            # same job; results/cuda/bench.log compares the two.)
+            db.best_key.fill(self.key_init)
             self.k_blocks((db.N // threads, db.D), (threads,),
                           (db.act, db.state0, h, np.int32(db.N),
                            db.cost, db.theta, db.omega, db.best_key))
@@ -277,8 +281,11 @@ PTX_PATTERNS = [
 def ptx_text(source=None):
     """Compile the kernel source to PTX, the GPU's virtual assembly language
     (the step before machine code), with the same options as CudaEngine.
-    PTX is not the final machine code (SASS): the driver's assembler still
-    translates it, and with no CUDA Toolkit here there is no disassembler."""
+    PTX is not the machine code that runs (SASS): for CudaEngine, CuPy asks
+    NVRTC for sm_86 machine code directly (a cubin, cached in .cupy_cache/),
+    and PTX is NVRTC's intermediate step on the way. This function stops at
+    the PTX so that it can be read; no disassembler for the cubin was
+    installed."""
     nv = cp.cuda.nvrtc
     if source is None:
         source = KERNEL_PATH.read_text(encoding="utf-8")

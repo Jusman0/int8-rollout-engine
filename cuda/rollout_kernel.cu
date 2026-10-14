@@ -58,8 +58,9 @@
 
 // ------------------------------------------------------------ the weights --
 //
-// __constant__ memory is a small (64 KB) read-only region with its own cache
-// on every SM. It is fast in one case: when all threads of a warp read the
+// __constant__ memory is a 64 KB region of device memory, read-only for the
+// kernels and read through a small constant cache on every SM. It is fast
+// in one case: when all threads of a warp read the
 // SAME address in the same instruction, one read is broadcast to all 32
 // threads. If the threads asked for different addresses, the reads would be
 // serialized, one per distinct address. Here every thread of a warp executes
@@ -74,13 +75,16 @@
 // sequencer re-reads every weight from the central ROM in every imagined
 // step, one per clock, and broadcasts it. In the PTX the compiler emits
 // (test_bitexact.py prints the counts), each of the 45 constant words
-// (16 + 16 + 8 + 2 + 1 + 2) is loaded once, before the step loop. What the final
-// assembler does with them is not visible here (no disassembler without the
-// CUDA Toolkit): it reports 40 registers per thread (bench.py), too few to
-// hold all 45 words plus the loop's own values, and NVIDIA instructions can
-// take a constant-memory word directly as an operand, so it most likely
-// reads them from the constant cache inside the loop. Either way, all 32
-// threads of a warp read the same word at the same time: the broadcast case.
+// (16 + 16 + 8 + 2 + 1 + 2) is loaded once, before the step loop. PTX is
+// only NVRTC's intermediate step: CuPy asks NVRTC for sm_86 machine code
+// directly (a cubin, which CuPy caches in .cupy_cache/), and that machine
+// code was not disassembled (no disassembler was installed). The compiled
+// kernel uses 40 registers per thread (the driver reports it; bench.py
+// prints it), too few to hold all 45 words plus the loop's own values, and
+// NVIDIA instructions can take a constant-memory word directly as an
+// operand, so it most likely reads them from the constant cache inside the
+// loop. Either way, all 32 threads of a warp read the same word at the same
+// time: the broadcast case.
 
 __constant__ int c_W1[N_HID];   // row j of W1 packed as 4 int8: bytes
                                 // (W1[j][0], W1[j][1], W1[j][2], 0), byte 0
@@ -195,8 +199,11 @@ __device__ __forceinline__ void imagine_step(int& theta, int& omega, int& cost, 
     // Cost of the new state, exactly golden.int_step's expression and order:
     //   theta'^2 + ((21 * omega'^2) >> 5) + (u^2 >> 11)
     // each term floored on its own. All terms are >= 0, so these >> are plain
-    // divisions by 32 and 2048. The largest step cost is 26,975, so even
-    // H = 30 (the longest horizon bench.py runs) stays far inside an int.
+    // divisions by 32 and 2048. The largest step cost is
+    // 16,384 + 10,584 + 8 = 26,976 (theta = -128, omega = +-127, u = -128;
+    // the planner's actions stay in -127..127, which gives DESIGN.md's
+    // 26,975), so the int cost cannot overflow for any H up to 79,607
+    // (2^31 / 26,976). bench.py's longest horizon is H = 30.
     cost += theta * theta + ((21 * omega * omega) >> 5) + ((u * u) >> 11);
 }
 

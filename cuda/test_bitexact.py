@@ -13,9 +13,12 @@ Bit-exact test of the CUDA rollout kernels against the golden model.
      golden.int_rollout + golden.argmin_first. rollout_blocks with 256- and
      1,024-thread blocks, so the argmin crosses warps (shared memory) and
      blocks (atomicMin).
-  3. Planted bugs: edited copies of rollout_kernel.cu, each run through all
-     of the above. Every one must FAIL somewhere; a check that cannot fail
-     proves nothing.
+  3. Planted bugs: edited copies of rollout_kernel.cu (and one wrong
+     CudaEngine argument), each run through all of the above. Every one
+     must FAIL somewhere; a check that cannot fail proves nothing. The bugs
+     in code that only rollout_blocks has (the argmin across warps and
+     across blocks, the start value of best_key) must FAIL on one named
+     run: the N = 4,096 set with 256-thread blocks, 16 blocks per decision.
 
 Run from the repo root on the machine with the GPU:
   .venv\\Scripts\\python.exe cuda\\test_bitexact.py               (Windows)
@@ -40,23 +43,51 @@ import cuda_engine  # noqa: E402  (sets the CuPy cache directory before importin
 import golden       # noqa: E402
 
 # ------------------------------------------------------- planted bugs --
-# (name, text in rollout_kernel.cu, replacement). Each text must occur once.
+# The run that the rollout_blocks-only bugs below must FAIL: 16 blocks of 8
+# warps per decision, so level 2 (shared memory, 8 warp winners) and level 3
+# (atomicMin over 16 block winners) both decide something.
+BLOCKS_RUN = "random N=4096 H=15, every plan 8 times [rollout_blocks x256]"
+
+# (name, text in rollout_kernel.cu, replacement, run that must FAIL or None).
+# Each text must occur exactly once. With None, any one failing run is enough.
 MUTANTS = [
     ("logical >> instead of arithmetic in all three requantization shifts",
      "return acc >> s;",
-     "return (int)((unsigned)acc >> s);"),
+     "return (int)((unsigned)acc >> s);", None),
     ("theta saturates at +-127 instead of wrapping",
      "theta = wrap_int8(theta + d_theta);",
-     "theta = clamp_int(theta + d_theta, -127, 127);"),
+     "theta = clamp_int(theta + d_theta, -127, 127);", None),
     ("omega wraps instead of saturating",
      "omega = clamp_int(omega + d_omega, -127, 127);",
-     "omega = wrap_int8(omega + d_omega);"),
+     "omega = wrap_int8(omega + d_omega);", None),
+    ("h clamped at 255 instead of 127 (h = 128..255 is a negative signed byte to layer 2's __dp4a)",
+     "clamp_int(requant_shift(acc1, c_S1), 0, 127)",
+     "clamp_int(requant_shift(acc1, c_S1), 0, 255)", None),
     ("argmin tie-break picks the higher index (the RTL's <= bug)",
      "(other_cost == cost && other_idx < idx)",
-     "(other_cost == cost && other_idx > idx)"),
+     "(other_cost == cost && other_idx > idx)", None),
     ("argmin tree compares costs only and keeps its own on a tie",
      "if (other_cost < cost || (other_cost == cost && other_idx < idx)) {",
-     "if (other_cost < cost) {"),
+     "if (other_cost < cost) {", None),
+    ("level 2 (shared memory) reads only warp 0's winner",
+     "const int n_warps = blockDim.x / WARP_SIZE;",
+     "const int n_warps = 1;", BLOCKS_RUN),
+    ("level 2: lanes with no warp winner to read get cost 0 instead of 0x7fffffff",
+     "best_cost = (lane < n_warps) ? s_cost[lane] : 0x7fffffff;",
+     "best_cost = (lane < n_warps) ? s_cost[lane] : 0;", BLOCKS_RUN),
+    ("level 3: atomicMin key with the index in the high half, (idx << 32) | cost",
+     "((unsigned long long)(unsigned)best_cost << 32) | (unsigned)best_idx;",
+     "((unsigned long long)(unsigned)best_idx << 32) | (unsigned)best_cost;", BLOCKS_RUN),
+    ("level 3: atomicMin key without the index, cost << 32 only",
+     "<< 32) | (unsigned)best_idx;",
+     "<< 32);", BLOCKS_RUN),
+]
+
+# (name, CudaEngine keyword arguments, run that must FAIL): bugs on the host
+# side, with the kernel source left as it is.
+HOST_MUTANTS = [
+    ("best_key starts at 0 instead of 2^64 - 1 (a memset of 0x00 instead of 0xff): no atomicMin can lower it",
+     {"key_init": 0}, BLOCKS_RUN),
 ]
 
 
@@ -182,6 +213,32 @@ def run_all(engine, sets):
     return results
 
 
+def check_bug(what, bad, sets, must_fail):
+    """Run every set through an engine with a planted bug and print where it
+    fails. Caught = at least one run FAILs, or, if must_fail names a run,
+    that run FAILs."""
+    runs = run_all(bad, sets)
+    labels = [f"{name} [{label}]" for name, label, _ in runs]
+    failed = [(lab, r) for lab, (_, _, r) in zip(labels, runs) if not r["ok"]]
+    passed = [lab for lab, (_, _, r) in zip(labels, runs) if r["ok"]]
+    if must_fail is None:
+        caught = len(failed) > 0
+    else:
+        assert must_fail in labels, f"no run called {must_fail}"
+        caught = must_fail not in passed
+    print(f"  {'caught' if caught else 'MISSED'}: {what}: {len(failed)} of {len(runs)} set/kernel runs FAIL"
+          + (f"; must FAIL on {must_fail}: {'yes' if caught else 'NO'}" if must_fail else ""))
+    if failed:
+        # the named run if there is one and it failed, otherwise the first failure
+        lab, r = next(((lab, r) for lab, r in failed if lab == must_fail), failed[0])
+        n = r["n"]
+        print(f"      {'on' if lab == must_fail else 'first'}: {lab}: costs {r['cost']}/{n}, "
+              f"final states {r['state']}/{n}, best {r['best']}/{n}")
+    if passed:
+        print(f"      still PASS on: {', '.join(passed)}")
+    return caught
+
+
 def main():
     ap = argparse.ArgumentParser(description="bit-exact test of cuda/rollout_kernel.cu")
     ap.add_argument("--vec", action="append", default=None,
@@ -260,31 +317,26 @@ def main():
         if "first_best" in r:
             print(f"    first wrong best: {r['first_best']}")
         ok = ok and r["ok"]
-    print(f"  candidate results compared (cost, theta and omega each): "
-          f"{sum(r['values'] for _, _, r in results):,}; "
+    # Each candidate is checked once per kernel that runs its set (two
+    # kernels per set), so the total counts every candidate twice.
+    total = sum(r["values"] for _, _, r in results)
+    recorded = sum(r["values"] for name, _, r in results if name in vec_dirs)
+    print(f"  candidate results compared (cost, theta and omega each), over all sets and both kernels: "
+          f"{total:,} ({sum(want['cost'].size for _, want in sets):,} distinct candidates, each on two "
+          f"kernels; recorded sets {recorded:,}, random sets {total - recorded:,}); "
           f"wrong: {sum(r['bad_values'] for _, _, r in results)}")
 
     # ---- planted bugs ----------------------------------------------------
     if not args.no_mutants:
-        print("\nPlanted bugs (each must FAIL at least one check above):")
+        print("\nPlanted bugs (each must FAIL at least one check above; where a run is named, that run):")
         source = cuda_engine.KERNEL_PATH.read_text(encoding="utf-8")
-        for what, old, new in MUTANTS:
+        for what, old, new, must_fail in MUTANTS:
             assert source.count(old) == 1, f"mutant text not found exactly once: {old}"
             bad = cuda_engine.CudaEngine(source=source.replace(old, new))
-            runs = run_all(bad, sets)
-            failed = [(name, label, r) for name, label, r in runs if not r["ok"]]
-            passed = [f"{name} [{label}]" for name, label, r in runs if r["ok"]]
-            caught = len(failed) > 0
-            ok = ok and caught
-            print(f"  {'caught' if caught else 'MISSED'}: {what}: "
-                  f"{len(failed)} of {len(runs)} set/kernel runs FAIL")
-            if failed:
-                name, label, r = failed[0]
-                n = r["n"]
-                print(f"      first: {name} [{label}]: costs {r['cost']}/{n}, "
-                      f"final states {r['state']}/{n}, best {r['best']}/{n}")
-            if passed:
-                print(f"      still PASS on: {', '.join(passed)}")
+            ok = check_bug(what, bad, sets, must_fail) and ok
+        for what, kwargs, must_fail in HOST_MUTANTS:
+            bad = cuda_engine.CudaEngine(**kwargs)
+            ok = check_bug(what, bad, sets, must_fail) and ok
 
     print(f"\n({time.time() - t_start:.1f} s)")
     print("PASS" if ok else "FAIL")
