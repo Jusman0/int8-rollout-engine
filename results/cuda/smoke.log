@@ -1,5 +1,5 @@
 # command: .venv\Scripts\python.exe cuda\smoke_test.py --mutants
-# run on the Windows PC with the RTX 3060, 2026-10-13 23:14:11.51; cuda\ files as in commit ff21168 on the Mac, copied with scp, SHA-256 identical
+# run on the Windows PC with the RTX 3060, 2026-10-13 23:17:59.85; cuda\ files as in commit 18e97ff on the Mac, copied with scp, SHA-256 identical
 CuPy 14.2.0, NumPy 2.5.4
 CUDA runtime (CuPy's) 13.2, driver supports CUDA 13.3, NVRTC 13.3
 NVRTC loaded from C:\Users\user\int8-rollout-engine\.venv\Lib\site-packages\nvidia\cu13\bin\x86_64\nvrtc64_130_0.dll (found via site-packages)

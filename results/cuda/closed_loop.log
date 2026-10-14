@@ -1,5 +1,5 @@
 # command: .venv\Scripts\python.exe cuda\closed_loop.py
-# run on the Windows PC with the RTX 3060, in the same command line as bitexact.log and right after it (cmd expanded this time stamp when that line started: 2026-10-13 23:14:20.35); cuda\ files as in commit ff21168 on the Mac, copied with scp, SHA-256 identical
+# run on the Windows PC with the RTX 3060, 2026-10-13 23:18:13.93; cuda\ files as in commit 18e97ff on the Mac, copied with scp, SHA-256 identical
 CUDA closed loop: gymnasium Pendulum-v1, seed 0, H = 15, 20 episodes x 200 ticks
 command: python.exe cuda\closed_loop.py
 Python 3.14.3, NumPy 2.5.4, CuPy 14.2.0
@@ -36,7 +36,7 @@ GPU costs, final states, best_idx and best_cost equal golden's on the same input
 GPU chosen best_idx equal to the golden closed loop's: 4000/4000
 episode returns identical (float ==): 20/20
 mean return: GPU -126.1, golden -126.1
-wall time: GPU closed loop 4.67 s (1.167 ms per tick, of which eng.decide 0.346 ms; the rest is the pendulum, the planner and the per-tick golden check), golden closed loop 3.17 s
+wall time: GPU closed loop 4.55 s (1.138 ms per tick, of which eng.decide 0.336 ms; the rest is the pendulum, the planner and the per-tick golden check), golden closed loop 3.24 s
 GPU returns digit for digit equal to sim/returns.txt (golden.py on this machine): 20/20
 GPU returns digit for digit equal to sim/mac/returns.txt (golden.py on the Mac, the RTL logs' vectors): 2/20
 PASS
