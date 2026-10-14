@@ -330,3 +330,26 @@ and explained.*
     1,000 decisions that `make test` replays: no ω saturation, no h clamp, 6 ties), `results/machine.txt`.
   - **Stage-4 bullets corrected:** the CI bullet now gives the real reason `make mutants` is not in CI, and a new
     bullet records the README's external figures (DreamZero, GR00T) as a deviation from §8.
+- **CUDA port (2026-10-13).** No rule in §1–§7 was changed; `rtl/`, `tb/`, `model/` and the Makefile were not
+  touched. New: `cuda/` (kernels, host engine, tests, benchmark, `cuda/README.md`) and `results/cuda/`. These are
+  the details §4–§6 leave open on a GPU:
+  - **Toolchain:** CUDA C++ compiled at run time by NVRTC 13.3 through `cupy.RawModule` (CuPy 14.2.0), with
+    `--std=c++20`, so `>>` on a negative `int` is guaranteed arithmetic. No nvcc, no CUDA Toolkit. Run on a Windows
+    11 PC with an RTX 3060.
+  - **Mapping:** one thread per candidate (a lane), one 32-thread block, i.e. one warp, per decision
+    (`rollout_warp`), all recorded decisions in one launch. W1, B1, W2, B2, S1 and S2 in `__constant__` memory. W1
+    rows are packed as four int8 per int32 with a zero 4th byte, so layer 1 is one `__dp4a` per neuron on
+    (θ, ω, u, 0); h is packed four per word for layer 2's four `__dp4a` per output (valid as signed bytes because
+    h ≤ 127). θ wraps with `((v + 128) & 255) - 128`.
+  - **Argmin:** five `__shfl_down_sync` rounds on (cost, index) pairs, comparing the index too: a tree does not
+    compare in index order, so strict `<` alone would not give §5's lowest index on a tie; the pair comparison
+    gives exactly the scan's result. For N > 32 candidates (`rollout_blocks`): shared memory across the warps of a
+    block, then one 64-bit `atomicMin` on (cost << 32 | index) across blocks, the keys set to 2^64 − 1 first.
+  - **Widths:** accumulators and costs are 32-bit `int`, wider than the RTL's 24 bits; both hold every value the
+    golden model can produce (worst-case |acc| 85,570; the cost fits up to H = 79,610). H is not limited to 16.
+  - **Checks:** the same `exp_*.hex` vectors as `tb/tb_rollout_engine.v`, random sets against
+    `golden.int_rollout` and `golden.argmin_first`, five planted kernel bugs, and the closed loop against the golden
+    model on the same machine. Logs made on the PC and copied back; only their line endings were changed.
+  - **Vectors made on the PC differ from the Mac's:** the PC's closed-loop episodes come out slightly different (the
+    cause was not pinned down), so its `sim/` holds a different set of decisions. On the PC, `golden.int_rollout`
+    reproduces every expected value in the Mac's files, and the GPU passes both sets.

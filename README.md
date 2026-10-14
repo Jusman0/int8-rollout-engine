@@ -2,13 +2,13 @@
 
 [![tests](https://github.com/Jusman0/int8-rollout-engine/actions/workflows/test.yml/badge.svg)](https://github.com/Jusman0/int8-rollout-engine/actions/workflows/test.yml)
 
-A 32-lane int8 Verilog engine that, every control tick, imagines 32 possible futures of a pendulum through a small learned physics model, scores each one, and hands back the best plan. It's sampling-based model-predictive control with the model rollouts in hardware, checked bit-exact against a Python golden model and in a closed loop where the RTL picks every action. Everything runs in simulation (Icarus Verilog), with synthesis estimates for an ECP5 FPGA.
+A 32-lane int8 Verilog engine that, every control tick, imagines 32 possible futures of a pendulum through a small learned physics model, scores each one, and hands back the best plan. It's sampling-based model-predictive control with the model rollouts in hardware, checked bit-exact against a Python golden model and in a closed loop where the RTL picks every action. Everything runs in simulation (Icarus Verilog), with synthesis estimates for an ECP5 FPGA. A CUDA port of the same integer math runs bit-exact on an RTX 3060 ([cuda/README.md](cuda/README.md)).
 
 Board bring-up on a Tang Nano 20K: in progress, see [board/README.md](board/README.md). Nothing has run on hardware yet.
 
 ## Results
 
-Every result here comes from a log in [`results/`](results/), and the command next to it reproduces the numbers in that log (the logs also carry notes and wall times added when they were made). Runs: Apple M2, Icarus Verilog 13.0, Python 3.14, NumPy 2.5.4, gymnasium 1.4.0 ([`machine.txt`](results/machine.txt)). The DreamZero and GR00T figures further down come from the sources linked there, not from this repo.
+Every result here comes from a log in [`results/`](results/), and the command next to it reproduces the numbers in that log (the logs also carry notes and wall times added when they were made). Runs: Apple M2, Icarus Verilog 13.0, Python 3.14, NumPy 2.5.4, gymnasium 1.4.0 ([`machine.txt`](results/machine.txt)); the three CUDA rows ran on a Windows 11 PC with an RTX 3060, CuPy 14.2.0 and NVRTC 13.3 (versions at the top of each log in [`results/cuda/`](results/cuda/)). The DreamZero and GR00T figures further down come from the sources linked there, not from this repo.
 
 | Result | Log | Reproduce |
 |---|---|---|
@@ -18,6 +18,9 @@ Every result here comes from a log in [`results/`](results/), and the command ne
 | **Clocks per decision**: **1,281** at 32 lanes, H = 15. All 6 configurations (below) equal (32 / LANES)·(83·H + 2) + 34 exactly | [`sweep.log`](results/sweep.log), [`cycles.log`](results/cycles.log) | `make sweep` |
 | **int8 vs float planner**: no measurable difference at H = 15, **+0.6** return (95% CI −7.7 to +9.6, 100 episodes). At H = 5, int8 is worse by 142 | [`planner_quality.txt`](results/planner_quality.txt) | `python3 model/golden.py --eval` |
 | **Planted bugs**: **10 / 10** caught on the corner-case decisions (only 7 / 10 on the first 300 decisions, see below) | [`mutants.log`](results/mutants.log) | `make mutants` |
+| **CUDA port, bit-exact**: on an RTX 3060, the 4,000 decisions `make test-full` replays and two more sets of 4,000 made on the PC (H = 15 and H = 5), each set in one kernel launch: every cost, final state and best index equal the golden model's; random decisions with up to 4,096 candidates too; in all, **918,528** candidate results compared, **0** wrong. **5 / 5** planted kernel bugs caught | [`cuda/bitexact.log`](results/cuda/bitexact.log) | on the GPU machine: `python cuda/test_bitexact.py --vec sim --vec sim/mac --vec sim/h5` ([cuda/README.md](cuda/README.md)) |
+| **CUDA closed loop, the GPU in charge**: the kernel picks every action of the 20 episodes. **20 / 20** returns identical (float `==`) to the golden model's on the same PC, **4,000 / 4,000** choices the same | [`cuda/closed_loop.log`](results/cuda/closed_loop.log) | `python cuda/closed_loop.py` |
+| **CUDA timing**: one decision (32 candidates, H = 15) is **4.25 µs** of GPU time; 4,096 candidates take 5.87 µs and 65,536 take 26.98 µs; each imagined step adds about 0.20 µs. A round trip from Python, actions in and best index out, takes 62.95 µs on this Windows PC | [`cuda/bench.log`](results/cuda/bench.log) | `python cuda/bench.py` |
 | **ECP5-45F, 32 lanes**: 13,804 LUT4s before packing (31%), 33 of 72 DSP multipliers (one per lane, plus one for a ROM address, see below). **47.49 MHz** post-route estimate, out-of-context, median of 3 seeds, so it **misses** its 50 MHz target | [`synth/summary.txt`](results/synth/summary.txt) | `make timing` |
 | The learned model's one-step RMS error on held-out data: 0.108 LSB in θ, 0.484 LSB in ω | [`train_dynamics.log`](results/train_dynamics.log) | `python3 model/train_dynamics.py` |
 
@@ -134,7 +137,11 @@ cost += θ'² + ((21·ω'²) >> 5) + (u² >> 11)                                
 
 ## The latency lesson
 
-More lanes buy more candidates, not a shorter decision: going from 8 to 32 lanes cuts a decision from 5,022 to 1,281 clocks only because 8 lanes need four passes over the same 32 candidates. Inside one candidate, step t + 1 needs the state from step t, so its H imagined steps run one after another at 83 clocks each, a floor of 1,245 clocks at H = 15 that the 32-lane engine is only 36 clocks above ([`results/cycles.log`](results/cycles.log)). What's left is fewer imagined steps (H = 5 takes 451 clocks, but plans badly, see above) or a cheaper step, which means more multipliers working on one candidate. [DreamZero](https://arxiv.org/abs/2602.15922) shows the same pressure at scale: its latency is denoising steps × one forward pass of a 14-billion-parameter model, and it cut 16 steps to an effective 4 and then to 1 on the way from about 5.7 s to 150 ms per action chunk.
+More lanes buy more candidates, not a shorter decision: going from 8 to 32 lanes cuts a decision from 5,022 to 1,281 clocks only because 8 lanes need four passes over the same 32 candidates. Inside one candidate, step t + 1 needs the state from step t, so its H imagined steps run one after another at 83 clocks each, a floor of 1,245 clocks at H = 15 that the 32-lane engine is only 36 clocks above ([`results/cycles.log`](results/cycles.log)). What's left is fewer imagined steps (H = 5 takes 451 clocks, but plans badly, see above) or a cheaper step, which means more multipliers working on one candidate. The CUDA port shows the same shape on a GPU: 5.21 µs for 32 candidates, 5.87 µs for 4,096, and about 0.20 µs more for every imagined step ([`results/cuda/bench.log`](results/cuda/bench.log)). [DreamZero](https://arxiv.org/abs/2602.15922) shows the same pressure at scale: its latency is denoising steps × one forward pass of a 14-billion-parameter model, and it cut 16 steps to an effective 4 and then to 1 on the way from about 5.7 s to 150 ms per action chunk.
+
+## CUDA port
+
+[`cuda/`](cuda/) runs the same integer rollouts on an NVIDIA GPU, as a port of the RTL's ideas: one thread per candidate (a lane), one warp of 32 threads per decision (the 32 lanes in lockstep), the weights in `__constant__` memory so that one read serves the whole warp (the weight broadcast), `__dp4a` for four int8 multiply-adds in one instruction, and a five-round warp-shuffle argmin instead of the 32-clock scan. The kernels are CUDA C++ compiled at run time by NVRTC through CuPy, so the Windows PC they ran on needed no CUDA Toolkit. They match the golden model bit for bit on every recorded decision and in the closed loop (the CUDA rows above). The RTL-to-CUDA mapping, the timing and what it doesn't show are in [cuda/README.md](cuda/README.md); the study questions are in [STUDY.md](STUDY.md#5-cuda-port).
 
 ## Why this connects to robotics
 
@@ -148,6 +155,7 @@ In his talk at [Sequoia AI Ascent 2026](https://sequoiacap.com/article/ai-ascent
 - **What int8 costs.** At H = 15 nothing measurable (+0.6, 95% CI −7.7 to +9.6). At H = 5 the int8 planner is 142 worse than the float one, for a reason I haven't found.
 - **The cost is approximated.** The real cost in integer units has weights 0.6587 on ω² and 0.000412 on u². The hardware uses 21/32 = 0.65625 and 1/2048 = 0.000488, so that they're shifts and adds, and each term is rounded down.
 - **One trained model**, seed 0. The planted bugs were run at 32 lanes and H = 15 only, and the `cycles` output leaves out loading the actions (above).
+- **The CUDA port ran on one GPU**, an RTX 3060 under Windows (WDDM), timed with CUDA events only: no profiler, no view of the final machine code, clocks not locked, and another program's idle process held a GPU context during the benchmark ([cuda/README.md](cuda/README.md)).
 - CI (`.github/workflows/test.yml`) runs `make golden && make test-full` on Ubuntu with its Icarus Verilog package, and passed on the first push. The logs in `results/` are from Icarus 13.0 on macOS.
 
 ## Run it
@@ -163,6 +171,8 @@ make sweep       # clocks for LANES 8/16/32 x H 5/15
 make synth       # yosys resource report and the DSP-cell listing, 32 lanes
 make timing      # place and route on an ECP5-45F, 3 seeds, LANES 32 and 8
 ```
+
+The CUDA port needs an NVIDIA GPU and a virtualenv with CuPy; its setup and commands are in [cuda/README.md](cuda/README.md).
 
 Wall times, as recorded in the logs: `make test` 273 s, `make test-full` 625 s, `make cosim` 773 s, `make mutants` 456 s, `make sweep` 223 s. They were measured with all of these running at once on the M2, so a run on its own is faster. `make synth` and `make timing` weren't timed in a log.
 
@@ -194,6 +204,7 @@ model/train_dynamics.py   trains the 3 -> 16 -> 2 dynamics model (NumPy, float32
 model/golden.py           folds it to int8, the integer golden model, rom/ and test vectors
 model/planner.py          host side of the planner, shared by golden.py and the co-simulation
 cosim/                    closed loop: Python pendulum <-> named pipes <-> Icarus
+cuda/                     CUDA port: kernels (compiled by NVRTC through CuPy), bit-exact test, closed loop, benchmark
 mutants/                  planted bugs (sed scripts) and the corner-case vector picker
 perf/                     clock sweep and the clock formula check
 synth/                    Yosys scripts (resources, DSP-cell listing) and ECP5 place-and-route
@@ -209,6 +220,6 @@ Each project computes the same neural-network operation, the weighted sum, one s
 2. [tinyml-mnist-uno](https://github.com/Jusman0/tinyml-mnist-uno): in int8 on an 8-bit CPU, one MAC at a time
 3. [dp4a-unit](https://github.com/Jusman0/dp4a-unit): as dedicated hardware, four MACs per clock
 4. [tiny-tensor-core](https://github.com/Jusman0/tiny-tensor-core): the whole network in hardware, 32 MACs per clock
-5. **int8-rollout-engine**: the network inside a control loop, 32 lanes each imagining a different future
+5. **int8-rollout-engine**: the network inside a control loop, 32 lanes each imagining a different future, and in [`cuda/`](cuda/) the same rollouts on a GPU, with `__dp4a` doing what dp4a-unit does in hardware
 
 Built with an AI pair programmer. The design decisions and their reasons are in DESIGN.md.
