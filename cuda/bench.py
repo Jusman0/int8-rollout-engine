@@ -28,8 +28,10 @@ launches, after priming.
 The GPU clock is not locked (that needs admin rights), and an idle GPU
 drops to a slow power state within a fraction of a second. So every GPU
 series is preceded by 50 ms of back-to-back launches of the same kernel
-("priming"), all GPU series run before any CPU timing, and nvidia-smi's
-clock readings are printed before, after the GPU part, and at the end.
+("priming"), and all GPU series run before any CPU timing. After each graph
+series, nvidia-smi is asked for the SM clock while that graph replays for
+another 0.2 s or so, so the log shows the clock the series ran at (nvidia-smi
+samples it; it is not a lock). Readings between series are printed too.
 
 Before anything touches the GPU, the script lists the processes that hold a
 GPU context and the GPU's utilization. If the GPU is busy (utilization above
@@ -37,8 +39,8 @@ GPU context and the GPU's utilization. If the GPU is busy (utilization above
 machine these logs come from, a long-running service may), it also stops,
 unless --shared-gpu is given. A run keeps the GPU busy with short kernels
 (the longest, 4,000 decisions in one launch, takes under 0.1 ms, and a graph
-replays at most 100 launches, a few ms) for about 2.5 s in total, most of
-it priming; the footer prints both totals.
+replays at most 100 launches, a few ms) for about 6 s in total, most of it
+priming and clock sampling; the footer prints the totals.
 
 Run from the repo root on the machine with the GPU:
   .venv\\Scripts\\python.exe cuda\\bench.py        (Windows)
@@ -51,6 +53,7 @@ import platform
 import statistics
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -143,6 +146,32 @@ def prime(launch):
     PRIME_TOTAL_S[0] += time.perf_counter() - t0
 
 
+def clock_while_busy(launch, seconds=0.2):
+    """nvidia-smi's SM clock and P-state read while launch() keeps the GPU
+    busy: a second thread asks nvidia-smi a third of the way in, while this
+    one goes on launching. (The other readings are taken between series,
+    when the GPU may already be dropping to idle clocks.)"""
+    reading = {}
+
+    def sample():
+        time.sleep(seconds / 3)
+        reading["smi"] = nvidia_smi("--query-gpu=clocks.sm,pstate,utilization.gpu",
+                                    "--format=csv,noheader")
+    sampler = threading.Thread(target=sample)
+    sampler.start()
+    t0 = time.perf_counter()
+    n = 0
+    while time.perf_counter() - t0 < seconds or sampler.is_alive():
+        launch()
+        n += 1
+        if n % 16 == 0:
+            cp.cuda.Device().synchronize()
+    cp.cuda.Device().synchronize()
+    sampler.join()
+    PRIME_TOTAL_S[0] += time.perf_counter() - t0
+    return reading["smi"]
+
+
 def one_launch_ms(launch, reps):
     """GPU time of single launches, an event pair around each, in ms."""
     prime(launch)
@@ -158,10 +187,11 @@ def one_launch_ms(launch, reps):
     return out
 
 
-def graph_ms(launch, reps=20, k=GRAPH_K):
+def graph_ms(launch, reps=20, k=GRAPH_K, clock=False):
     """GPU time per launch when k launches are replayed from one CUDA graph.
     Stream capture records the launches into a graph instead of running
-    them; graph.launch() then hands all k to the GPU in one call."""
+    them; graph.launch() then hands all k to the GPU in one call. With
+    clock=True also returns nvidia-smi's reading while the graph replays."""
     launch()                                   # anything lazy happens outside the capture
     cp.cuda.Device().synchronize()
     stream = cp.cuda.Stream(non_blocking=True)
@@ -181,6 +211,8 @@ def graph_ms(launch, reps=20, k=GRAPH_K):
         total = cp.cuda.get_elapsed_time(a, b)
         GPU_MS[0] += total
         out.append(total / k)
+    if clock:
+        return out, clock_while_busy(lambda: graph.launch(stream))
     return out
 
 
@@ -284,7 +316,7 @@ def main():
     db = cuda_engine.DeviceBatch(th, om, plans)
     for label, kernel, threads in (("rollout_warp", "warp", None), ("rollout_blocks x32", "blocks", 32)):
         launch = lambda: eng.launch(db, kernel, threads)  # noqa: E731
-        g = graph_ms(launch)
+        g, smi = graph_ms(launch, clock=True)
         t = one_launch_ms(launch, reps=200)
         b2b = back_to_back_ms(launch, launches=1000)
         extra = " (each with the fill of best_key, a second, tiny kernel)" if kernel == "blocks" else ""
@@ -292,6 +324,7 @@ def main():
         print(f"    graph: {us(med(g))} per launch (min {us(min(g))}); one launch: median {us(med(t))} "
               f"(min {us(min(t))}, {len(t)} launches); 1,000 ordinary launches back to back: "
               f"{us(b2b)} per launch")
+        print(f"    nvidia-smi while this graph replayed (SM clock, P-state, util): {smi}")
     g_fill = graph_ms(lambda: db.best_key.fill(cuda_engine.KEY_INIT))
     g_memset = graph_ms(lambda: db.best_key.data.memset_async(0xFF, db.best_key.nbytes))
     print(f"  setting best_key to 2^64 - 1 on its own, graph: fill() {us(med(g_fill))}, "
@@ -340,37 +373,39 @@ def main():
     # ---- (c) ------------------------------------------------------------
     sizes = (32, 256, 1024, 4096, 16384, 65536)
     print("\n(c) one decision, H = 15, N candidates: rollout_blocks, min(N, 256)-thread blocks")
-    print(f"  {'N':>7} {'blocks':>6} {'graph':>11} {'ns/candidate':>13} {'one launch median':>18}")
+    print(f"  {'N':>7} {'blocks':>6} {'graph':>11} {'ns/candidate':>13} {'one launch median':>18}"
+          f"   nvidia-smi while the graph replayed")
     for n in sizes:
         work[("c", n)] = th, om, plans = random_decision(rng, n, 15)
         dbn = cuda_engine.DeviceBatch(th, om, plans)
         threads = min(n, 256)
         launch = lambda: eng.launch(dbn, "blocks", threads)  # noqa: E731
-        g = graph_ms(launch)
+        g, smi = graph_ms(launch, clock=True)
         t = one_launch_ms(launch, reps=100)
-        print(f"  {n:>7,} {n // threads:>6} {us(med(g)):>11} {1e6 * med(g) / n:>13,.2f} {us(med(t)):>18}")
+        print(f"  {n:>7,} {n // threads:>6} {us(med(g)):>11} {1e6 * med(g) / n:>13,.2f} {us(med(t)):>18}"
+              f"   {smi}")
 
     # ---- (d) ------------------------------------------------------------
     print("\n(d) imagined steps H, one decision")
     for n, kernel in ((32, "warp"), (4096, "blocks")):
         label = "rollout_warp" if kernel == "warp" else "rollout_blocks x256"
         print(f"  N = {n:,}, {label}:")
-        print(f"    {'H':>3} {'graph':>11} {'one launch median':>18}")
+        print(f"    {'H':>3} {'graph':>11} {'one launch median':>18}   nvidia-smi while the graph replayed")
         meds = []
         for horizon in (1, 5, 15, 30):
             work[("d", n, horizon)] = th, om, plans = random_decision(rng, n, horizon)
             dbh = cuda_engine.DeviceBatch(th, om, plans)
             launch = lambda: eng.launch(dbh, kernel)  # noqa: E731
-            g = graph_ms(launch)
+            g, smi = graph_ms(launch, clock=True)
             t = one_launch_ms(launch, reps=100)
             meds.append(med(g))
-            print(f"    {horizon:>3} {us(med(g)):>11} {us(med(t)):>18}")
+            print(f"    {horizon:>3} {us(med(g)):>11} {us(med(t)):>18}   {smi}")
         slope, intercept = np.polyfit([1, 5, 15, 30], meds, 1)
         print(f"    least-squares line through the 4 graph figures: {us(slope)} per imagined step "
               f"+ {us(intercept)}")
     print(f"\nnvidia-smi at the end of the GPU part: {gpu_state()}")
-    print(f"GPU time inside the event pairs: {GPU_MS[0]:.0f} ms; wall time spent priming "
-          f"(back-to-back launches before each series): {PRIME_TOTAL_S[0]:.2f} s")
+    print(f"GPU time inside the event pairs: {GPU_MS[0]:.0f} ms; wall time spent priming and "
+          f"clock sampling (back-to-back launches outside the event pairs): {PRIME_TOTAL_S[0]:.2f} s")
 
     # ---- (e) ------------------------------------------------------------
     print(f"\n(e) NumPy golden.int_rollout on the CPU ({cpu_name()}), host wall time, the same inputs "
