@@ -172,7 +172,7 @@ and explained.*
 
 ## Changelog
 
-- **Stage 1, Python golden model (2026-10-12).** No rule in §1–§5 was changed. These are the details the spec left
+- **Stage 1, Python golden model.** No rule in §1–§5 was changed. These are the details the spec left
   open, written down so the RTL, testbench and co-simulation follow the same choices:
   - **Training (§3):** seed 0, 60 epochs, Adam (lr 1e-3), batch 256, He init. Everything stays float32 (the
     feasibility prototype had silently promoted its weights to float64). `model/dynamics_fp32.npz` also stores
@@ -188,7 +188,7 @@ and explained.*
   - **ROM layout (§6, §7.1):** one int8 weight per line, in broadcast order (`w1.hex` address 3j + i, `w2.hex`
     address 16k + j). Biases are 24-bit two's complement. The shifts are in `rom/params.vh` as `S1`, `S2_0` and
     `S2_1`. The decision-vector format is documented at the top of `model/golden.py`.
-- **Stage 2, RTL and bit-exact testbench (2026-10-12).** No rule in §1–§5 was changed and `model/golden.py` was not
+- **Stage 2, RTL and bit-exact testbench.** No rule in §1–§5 was changed and `model/golden.py` was not
   touched. One layout change to §6 (the action memory when LANES < 32, below); the rest are details §6 left open:
   - **Schedule (§6):** an imagined step is exactly 48 (L1) + 32 (L2) + 3 (COST) = 83 clocks, with no overhead clocks.
     A lane writes a finished dot product back one clock after its last MAC, reading the accumulator while its
@@ -216,7 +216,7 @@ and explained.*
     own compiled testbench. Besides the 32 costs, the 32 final states and best_idx/best_cost, the testbench checks:
     `cycles` against its own clock count, that `busy` rises with `start` and falls with `done`, and that `done`
     lasts one clock. A 10,000-clock watchdog turns a hung FSM into a FAIL.
-- **Stage 3, closed-loop co-simulation (2026-10-12).** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
+- **Stage 3, closed-loop co-simulation.** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
   Makefile were not touched. These are the details §7.3 left open:
   - **Files:** `cosim/host.py` (Python: the pendulum, the host planner from `model/planner.py`, the golden
     reference), `cosim/tb_cosim.v` (Icarus: `rollout_engine` behind two named pipes) and `cosim/run.sh` (compiles,
@@ -238,7 +238,7 @@ and explained.*
     tick that differs.
   - **Hangs:** the host gives the simulator 60 s to connect and 60 s per tick (`SIGALRM`), then fails. The
     testbench keeps the 10,000-clock watchdog and stops with FAIL if the host's input is short or the pipe closes.
-- **Stage 3, planted-bug tests (2026-10-12).** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
+- **Stage 3, planted-bug tests.** No rule in §1–§6 was changed; `rtl/`, `tb/`, `model/` and the
   Makefile were not touched. The unmodified RTL passes and all 9 planted bugs of that run FAILED (a 10th was added after review; `results/mutants.log` now holds the 10-bug run). These
   are the details §7.4 left open, and one deviation:
   - **Mutants:** §7.4's five, the dropped 21/32 weight on the ω cost, and three slips of my own: the step loop
@@ -257,7 +257,7 @@ and explained.*
   - **Pass rule:** the original RTL must PASS on both sets and every mutant must FAIL on the corner set. The
     command is `PYTHON=$(PYTHON) bash mutants/run_mutants.sh`; the `make mutants` target is for the integrator to
     add.
-- **Stage 3, cycle sweep (2026-10-12).** No rule in §1–§6 was changed. `perf/sweep.sh` runs the unchanged
+- **Stage 3, cycle sweep.** No rule in §1–§6 was changed. `perf/sweep.sh` runs the unchanged
   testbench (`make test LANES=… VEC=… N=200`) for LANES ∈ {32, 16, 8} × H ∈ {15, 5}, on 200 decisions per
   configuration (episode 0, seed 0) made by `golden.py --count 200 --out sim/perf/h15` and `--H 5 … sim/perf/h5`.
   golden.py rewrites `rom/` each time; the script checksums `rom/` and stops if the contents changed.
@@ -274,7 +274,7 @@ and explained.*
   (`results/synth/summary.txt`): LANES = 32 misses 50 MHz on all three seeds (median 47.49 MHz); LANES = 8 meets
   it on all three (median 51.54 MHz). The critical path runs from a broadcast register through the operand mux,
   the unregistered multiplier and the 21/32 shift-and-add into the 24-bit cost adder. Not fixed here.
-- **Stage 4, integration and documentation (2026-10-12).** No rule in §1–§7 was changed; `rtl/`, `tb/` and `model/`
+- **Stage 4, integration and documentation.** No rule in §1–§7 was changed; `rtl/`, `tb/` and `model/`
   were not touched.
   - **Makefile:** targets `cosim`, `mutants`, `sweep`, `synth` and `timing` run each stage's script with the command
     that stage used (the sweep agent proposed the name `perf`; it is `sweep` here). `YOSYS` and `NEXTPNR` pick the
@@ -301,7 +301,7 @@ and explained.*
     per action chunk; GR00T N1.7 taking 39.9 ms per inference on a Jetson AGX Thor (Jetson AI Lab tutorial). Each is
     sourced inline with a link, and the README's Results section says these come from the linked sources, not from
     this repo.
-- **Review fixes (2026-10-12).** No rule in §1–§5 was changed. §0 and §4 were reworded (below); the synthesizable
+- **Review fixes.** No rule in §1–§5 was changed. §0 and §4 were reworded (below); the synthesizable
   RTL is unchanged: Yosys builds the same netlist as before, byte for byte, at LANES = 32 and 8
   (`results/synth/netlist_check.txt`), so the place-and-route logs still apply and were not re-run.
   - **§0:** the quote "dreams a couple of seconds ahead and acts accordingly" was not from any source in the
@@ -364,7 +364,7 @@ and explained.*
     cause was not pinned down), so its `sim/` holds a different set of decisions. On the PC, `golden.int_rollout`
     reproduces every expected value in the Mac's files, and the GPU passes both sets.
 
-### Stage 7: on a real FPGA (2026-10-14)
+### Stage 7: on a real FPGA
 
 - **Board:** Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7), 27 MHz oscillator, no PLL, wrapped by `board/top.v` (UART
   protocol in `board/README.md`); open-source flow Yosys 0.69+286 `synth_gowin`, nextpnr-himbaechel 0.11.1-59,

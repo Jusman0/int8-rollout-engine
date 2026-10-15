@@ -144,7 +144,7 @@ More lanes buy more candidates, not a shorter decision: going from 8 to 32 lanes
 
 ## CUDA port
 
-[`cuda/`](cuda/) runs the same integer rollouts on an NVIDIA GPU, as a port of the RTL's ideas: one thread per candidate (a lane), one warp of 32 threads per decision (the 32 lanes in lockstep), the weights in `__constant__` memory so that one read serves the whole warp (the weight broadcast), `__dp4a` for four int8 multiply-adds in one instruction, and a five-round warp-shuffle argmin instead of the 32-clock scan. The kernels are CUDA C++ compiled at run time by NVRTC through CuPy, so the Windows PC they ran on needed no CUDA Toolkit. They match the golden model bit for bit on every recorded decision and in the closed loop (the CUDA rows above). The RTL-to-CUDA mapping, the timing and what it doesn't show are in [cuda/README.md](cuda/README.md); the study questions are in [STUDY.md](STUDY.md#5-cuda-port).
+[`cuda/`](cuda/) runs the same integer rollouts on an NVIDIA GPU, as a port of the RTL's ideas: one thread per candidate (a lane), one warp of 32 threads per decision (the 32 lanes in lockstep), the weights in `__constant__` memory so that one read serves the whole warp (the weight broadcast), `__dp4a` for four int8 multiply-adds in one instruction, and a five-round warp-shuffle argmin instead of the 32-clock scan. The kernels are CUDA C++ compiled at run time by NVRTC through CuPy, so the Windows PC they ran on needed no CUDA Toolkit. They match the golden model bit for bit on every recorded decision and in the closed loop (the CUDA rows above). The RTL-to-CUDA mapping, the timing and what it doesn't show are in [cuda/README.md](cuda/README.md).
 
 ## Why this connects to robotics
 
@@ -199,7 +199,6 @@ PASS
 
 ```
 DESIGN.md                 the spec: number formats, integer math, microarchitecture, and a changelog
-STUDY.md                  reading order, a hand calculation, ten RTL questions and eight CUDA questions
 rtl/rollout_lane.v        one lane: one candidate's state, h[0..15], one 8x8 multiplier, cost
 rtl/rollout_engine.v      ROMs, action memory, LANES lanes, FSM, result buffer, argmin
 tb/tb_rollout_engine.v    replays recorded decisions, bit-exact checks, watchdog
@@ -225,5 +224,3 @@ Each project computes the same neural-network operation, the weighted sum, one s
 3. [dp4a-unit](https://github.com/Jusman0/dp4a-unit): as dedicated hardware, four MACs per clock
 4. [tiny-tensor-core](https://github.com/Jusman0/tiny-tensor-core): the whole network in hardware, 32 MACs per clock
 5. **int8-rollout-engine**: the network inside a control loop, 32 lanes each imagining a different future, and in [`cuda/`](cuda/) the same rollouts on a GPU, with `__dp4a` doing what dp4a-unit does in hardware
-
-Built with an AI pair programmer. The design decisions and their reasons are in DESIGN.md.

@@ -1,90 +1,6 @@
-// rollout_kernel.cu: the int8 rollout engine of rtl/ as CUDA kernels.
-//
-// What it computes is DESIGN.md section 4, bit for bit: for every candidate
-// plan, H imagined steps of the 3 -> 16 -> 2 integer network, the integer
-// cost, and the argmin over the candidates (lowest index on a tie). The
-// expected values are the ones model/golden.py writes; cuda/test_bitexact.py
-// compares every cost, every final state and every best index.
-//
-// Compiled at run time by NVRTC (NVIDIA's runtime compiler library) through
-// cupy.RawModule in cuda/cuda_engine.py, with --std=c++20. No CUDA Toolkit,
-// no nvcc. Source kept to plain ASCII on purpose: it is read on Windows too.
-//
-// How the hardware ideas of the RTL map onto a GPU:
-//
-//   RTL (rtl/rollout_engine.v)            CUDA (this file)
-//   ------------------------------------  ------------------------------------
-//   one lane = one candidate              one thread = one candidate
-//   32 lanes in lockstep                  one warp = 32 threads that the GPU
-//                                         issues together, one instruction
-//                                         for all 32 at a time
-//   one decision                          one thread block (kernel 1: a block
-//                                         is exactly one warp)
-//   weight ROM, one weight broadcast      __constant__ memory: every thread of
-//   to all 32 lanes per clock             a warp reads the same weight in the
-//                                         same instruction, and the constant
-//                                         cache serves all 32 with one read
-//   one signed 8x8 multiplier per lane,   __dp4a: four signed 8x8 products
-//   one MAC per clock                     and their sum in one instruction
-//   argmin: scan n = 0..31, strict <,     warp shuffle: 5 rounds of
-//   32 clocks                             __shfl_down_sync, each thread
-//                                         compares with a thread 16, 8, 4,
-//                                         2, 1 lanes away
-//
-// Two kernels:
-//   rollout_warp    the RTL mirror: one block of 32 threads per decision.
-//                   All 4,000 recorded decisions go in one launch (grid =
-//                   4,000 blocks), and the GPU runs as many at once as its
-//                   streaming multiprocessors (SMs) can hold.
-//   rollout_blocks  N candidates per decision (N a multiple of 32), spread
-//                   over several blocks of up to 1,024 threads. The argmin
-//                   then has three levels: inside a warp (shuffles), across
-//                   the warps of a block (shared memory), across the blocks
-//                   of a decision (one 64-bit atomicMin).
-//
-// Memory layouts (all arrays in GPU global memory, filled by the host):
-//   act[(d * H + t) * N + n]  int8: candidate n's action at imagined step t
-//                             of decision d. Step-major, candidate-minor,
-//                             like the RTL's ACT[t] word and vec_act.hex, so
-//                             the 32 threads of a warp read 32 neighbouring
-//                             bytes: one memory transaction ("coalesced").
-//   state0[2 * d + 0]         int8 theta0 of decision d
-//   state0[2 * d + 1]         int8 omega0
-//   cost_out, theta_out, omega_out [d * N + n]  int32 results per candidate
-
 #define FULL_MASK 0xffffffffu   // all 32 lanes of the warp take part
 #define N_HID 16                // hidden neurons
 #define WARP_SIZE 32
-
-// ------------------------------------------------------------ the weights --
-//
-// __constant__ memory is a 64 KB region of device memory, read-only for the
-// kernels and read through a small constant cache on every SM. It is fast
-// in one case: when all threads of a warp read the
-// SAME address in the same instruction, one read is broadcast to all 32
-// threads. If the threads asked for different addresses, the reads would be
-// serialized, one per distinct address. Here every thread of a warp executes
-// the same loop over j at the same time, so they always ask for the same
-// weight together: exactly the RTL's weight broadcast, where the sequencer
-// reads one weight from ROM and all 32 lanes multiply it by their own value.
-//
-// The host (cuda_engine.py) fills these once, from rom/*.hex and
-// rom/params.vh, with cudaMemcpy to the symbol's address.
-//
-// One difference from the RTL: there the lanes store no weights; the
-// sequencer re-reads every weight from the central ROM in every imagined
-// step, one per clock, and broadcasts it. In the PTX the compiler emits
-// (test_bitexact.py prints the counts), each of the 45 constant words
-// (16 + 16 + 8 + 2 + 1 + 2) is loaded once, before the step loop. PTX is
-// only NVRTC's intermediate step: CuPy asks NVRTC for sm_86 machine code
-// directly (a cubin, which CuPy caches in .cupy_cache/), and that machine
-// code was not disassembled (no disassembler was installed). The compiled
-// kernel uses 40 registers per thread (the driver reports it; bench.py
-// prints it), too few to hold all 45 words plus the loop's own values, and
-// NVIDIA instructions can take a constant-memory word directly as an
-// operand, so it most likely reads them from the constant cache inside the
-// loop. Either way, all 32 threads of a warp read the same word at the same
-// time: the broadcast case.
 
 __constant__ int c_W1[N_HID];   // row j of W1 packed as 4 int8: bytes
                                 // (W1[j][0], W1[j][1], W1[j][2], 0), byte 0
@@ -96,16 +12,6 @@ __constant__ int c_B2[2];       // B2[k]
 __constant__ int c_S1;          // layer-1 shift (7)
 __constant__ int c_S2[2];       // layer-2 shifts (8, 7)
 
-// ------------------------------------------------------- small helpers --
-//
-// __device__ functions run on the GPU and are called from kernels; with
-// __forceinline__ the compiler pastes them into the caller, so they cost
-// nothing.
-
-// Four values -> one 32-bit word holding their low bytes, b0 in bits 7..0,
-// b1 in 15..8, b2 in 23..16, b3 in 31..24: the layout __dp4a reads.
-// "& 0xff" keeps a value's two's-complement byte (-1 -> 0xff). Built in
-// unsigned arithmetic, where shifting a bit into bit 31 is always defined.
 __device__ __forceinline__ int pack_int8x4(int b0, int b1, int b2, int b3)
 {
     const unsigned w = ((unsigned)b0 & 0xffu)
