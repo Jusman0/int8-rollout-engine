@@ -31,7 +31,7 @@ echo "Tools: $("$OSS/yosys" -V)"
 echo "       $("$OSS/nextpnr-himbaechel" --version 2>&1 | head -n 1)"
 echo "       apycula (gowin_pack) $(sed -n 's/^Version: //p' "$OSS"/../lib/python3*/site-packages/apycula-*.dist-info/METADATA)"
 echo
-echo "These are the tools' estimates. Nothing here has run on the board yet."
+echo "These are the tools' estimates. These DSP-block builds are not the one that ran on the board (that is the -nodsp build: results/build_nodsp.txt, results/hardware/)."
 echo "nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine"
 echo "(results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane"
 echo "multiplier. The board does not depend on them: it runs at 27 MHz from the 27 MHz oscillator (U3)."

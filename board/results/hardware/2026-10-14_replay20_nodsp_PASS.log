@@ -1,0 +1,33 @@
+# added after the run: bitstream on the board was the LANES = 8 build with SYNTH_OPTS=-nodsp (hardware multipliers OFF): board/build/engine_l8_nodsp.fs
+# added after the run: board = Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7), 27 MHz, BL616 debugger firmware 2025030317; host = MacBook (macOS), 115,200 baud
+# added after the run: the final "log:" line's absolute path was shortened to repo-relative
+# board/host.py --port /dev/cu.usbserial-20250303171 replay --n 20   (2026-10-14 20:44:38, port /dev/cu.usbserial-20250303171)
+replay: 20 recorded decisions from sim/ -> /dev/cu.usbserial-20250303171 (LANES = 8, H = 15; expect 5022 cycles each)
+decision 0: state (-7, 10) best 30 cost 397 cycles 5022 bit-exact
+decision 1: state (-6, 11) best 1 cost 323 cycles 5022 bit-exact
+decision 2: state (-4, 13) best 0 cost 218 cycles 5022 bit-exact
+decision 3: state (-3, 8) best 0 cost 291 cycles 5022 bit-exact
+decision 4: state (-3, 5) best 12 cost 216 cycles 5022 bit-exact
+decision 5: state (-2, 4) best 25 cost 267 cycles 5022 bit-exact
+decision 6: state (-1, 8) best 20 cost 136 cycles 5022 bit-exact
+decision 7: state (-1, 4) best 24 cost 211 cycles 5022 bit-exact
+decision 8: state (0, 1) best 9 cost 203 cycles 5022 bit-exact
+decision 9: state (0, -1) best 2 cost 257 cycles 5022 bit-exact
+decision 10: state (0, 3) best 29 cost 215 cycles 5022 bit-exact
+decision 11: state (0, 3) best 20 cost 160 cycles 5022 bit-exact
+decision 12: state (1, 2) best 0 cost 117 cycles 5022 bit-exact
+decision 13: state (1, 2) best 0 cost 123 cycles 5022 bit-exact
+decision 14: state (1, -2) best 13 cost 58 cycles 5022 bit-exact
+decision 15: state (0, -1) best 21 cost 61 cycles 5022 bit-exact
+decision 16: state (0, -2) best 0 cost 80 cycles 5022 bit-exact
+decision 17: state (0, -1) best 13 cost 108 cycles 5022 bit-exact
+decision 18: state (1, 4) best 15 cost 130 cycles 5022 bit-exact
+decision 19: state (1, -1) best 1 cost 73 cycles 5022 bit-exact
+decisions answered: 20/20 sent (protocol errors: 0)
+costs: 20/20 answered decisions bit-exact (all 32 candidates)
+final states: 20/20 answered decisions bit-exact (all 32 theta and omega)
+best_idx and best_cost: 20/20 answered decisions match
+cycles = 5022: 20/20 answered decisions
+wall time 1.3 s (62.7 ms per decision sent)
+PASS
+log: board/build/logs/replay_20261014_204437.log

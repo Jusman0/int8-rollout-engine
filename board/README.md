@@ -1,6 +1,6 @@
 # Tang Nano 20K bring-up
 
-**Status: nothing in this folder has run on hardware yet.** The board (a Sipeed Tang Nano 20K, GW2AR-LV18QN88C8/I7) arrives Wednesday, October 14. Everything here was built and tested on a Mac without it: the board design in simulation, the host program against a fake board, the bitstreams through the open-source toolchain. This README is the plan for the first days with the board.
+**Status: running on a real FPGA (October 14, 2026).** On a Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7) at 27 MHz, the LANES = 8 engine is bit-exact on all 4,000 recorded decisions and chose every action of 20 closed-loop Pendulum-v1 episodes with returns identical to the golden model's: hardware-in-the-loop, a real FPGA controller with a simulated plant. It needed one workaround: builds in which this open-source flow maps the lanes' multipliers onto the chip's DSP blocks computed wrong results on the chip, so the board build makes the multipliers from LUTs (`-nodsp`) (see [Results on hardware](#results-on-hardware)). The rest of this README is the bring-up plan as written before the board arrived, with notes where reality differed.
 
 The goal: run the unchanged `rtl/rollout_engine.v` on the FPGA, feed it the same 4,000 recorded decisions as `make test-full`, and check every byte it sends back against the golden model. Then let it pick the actions of 20 Pendulum-v1 episodes, with the pendulum simulated in Python on the Mac.
 
@@ -15,7 +15,31 @@ The goal: run the unchanged `rtl/rollout_engine.v` on the FPGA, feed it the same
 | [`check_pins.py`](check_pins.py) | after place and route: every port is on the pin it should be |
 | [`report.sh`](report.sh) | build summary (resources, Fmax, slack) from the nextpnr logs |
 | [`Makefile`](Makefile) | `sim`, `bit`, `blinky`, `prog`, `prog-blinky`, `flash`, `host-fake`, `results`, `clean` |
-| [`results/`](results/) | build reports; hardware logs go here once there are any |
+| [`results/`](results/) | build reports, and the hardware logs in [`results/hardware/`](results/hardware/) |
+
+## Results on hardware
+
+October 14, 2026: Tang Nano 20K, 27 MHz oscillator, no PLL; BL616 debugger firmware 2025030317; host a MacBook over USB at 115,200 baud. Logs in [`results/hardware/`](results/hardware/) (each one's first line names the bitstream that was on the board).
+
+| Test | Bitstream | Result | Log |
+|---|---|---|---|
+| `blinky`: LEDs count; holding S1 lights exactly one LED | `blinky.fs` | ✅ toolchain, clock, LED polarity (active low) and S1 polarity (1 when pressed) as designed | observed by eye, [`2026-10-14_blinky.md`](results/hardware/2026-10-14_blinky.md) |
+| `ping` | default (DSP blocks) | ✅ `K 8 15 1` | [`2026-10-14_ping.log`](results/hardware/2026-10-14_ping.log) |
+| `replay --n 20` | default: DSP multipliers ON, carry chains ON | ❌ every decision answered and `cycles` = 5,022 on all 20, but 0/20 costs, final states or best index right | [`…replay20_default_FAIL.log`](results/hardware/2026-10-14_replay20_default_FAIL.log) |
+| `replay --n 20` | `-nodsp`: DSP multipliers OFF (built from LUTs), carry chains ON | ✅ 20/20 bit-exact | [`…replay20_nodsp_PASS.log`](results/hardware/2026-10-14_replay20_nodsp_PASS.log) |
+| `replay --n 20` | `-noalu`: DSP multipliers ON, carry chains OFF | ❌ the same failure as the default build | [`…replay20_noalu_FAIL.log`](results/hardware/2026-10-14_replay20_noalu_FAIL.log) |
+| `replay --n 4000` | `-nodsp` | ✅ 4,000/4,000 decisions: every cost, final θ and ω, best index and best cost; `cycles` = 5,022 on all | [`…replay4000_nodsp_PASS.log`](results/hardware/2026-10-14_replay4000_nodsp_PASS.log) |
+| `loop --episodes 20` | `-nodsp` | ✅ the FPGA chose all 4,000 actions; 20/20 episode returns identical (float `==`) to `sim/returns.txt` | [`…loop20_nodsp_PASS.log`](results/hardware/2026-10-14_loop20_nodsp_PASS.log) |
+
+**What the A/B builds show.** With the DSP blocks in use, the chip ran the right sequence (the clock count was exact every time) but computed wrong numbers; turning the carry chains off did not help, and turning the DSP blocks off did. The default and `-noalu` builds gave byte-identical wrong answers, which points to a deterministic logic fault rather than timing. So with this flow (Yosys 0.69+286 `synth_gowin`, nextpnr-himbaechel 0.11.1-59, apicula's `gowin_pack`) and this design, the builds that put the lanes' signed 8x8 multipliers on the GW2A's DSP blocks compute wrong, and the same RTL built without them is bit-exact; the carry chains (apicula issue #514) are not the cause here. Which stage of the flow is at fault is not isolated yet: the Yosys netlist has one MULT9X9 per lane with both inputs marked signed, which hints the fault is later in the flow, but that is not proof. RTL simulation and the place-and-route timing report did not show this; checking the chip's answers did. The next step is a post-synthesis simulation of the Yosys netlist (Yosys's own cell models), which would separate a Yosys mapping error from a nextpnr or `gowin_pack` one. The wrong results are not explained by a simple signedness error: a Python emulation of the engine with the multiplier treated as unsigned (8- or 9-bit, either or both operands) matches none of the chip's 160 wrong candidate results from the first 5 decisions, while the same emulation with a signed multiplier matches the golden model on all 160 ([`diag/emulate_multiplier.py`](diag/emulate_multiplier.py), with the chip's answers in [`diag/chip_l8_default_5decisions.json`](diag/chip_l8_default_5decisions.json)). Not tested yet: a product that arrives one clock late (a DSP output register set wrongly), which would also leave the clock count right. Narrowing it to a minimal design for an upstream bug report is open.
+
+**Cost of the workaround.** Without DSP blocks, each lane's multiplier is built from LUTs: LANES = 8 still fits easily, and a LANES = 16 `-nodsp` build places and routes at 91% of the LUT4s (not run on the board yet). LANES = 32 would not fit without the DSP blocks (inferred from the 16-lane build's 91%; not built).
+
+**Where reality differed from the plan below.**
+- The very first `host.py` port search, right after programming, found no port (its log is empty). A `ping` with `--port` passed 30 seconds later, and a port search half a minute after that found `/dev/cu.usbserial-…1` at once. The second of the two ports is the UART.
+- One more failing run, a `replay --n 20` at 21:19, is left out of `results/hardware/`: nothing records which bitstream was loaded for it (its answers are byte-identical to the default build's).
+- With this debugger firmware on macOS, programming over JTAG after a `host.py` run worked without replugging (`openFPGALoader --detect` and `make prog` both succeeded straight after a UART session). Replug if programming fails.
+- The logic analyzer had not arrived, so the busy-pulse timing below is still expected, not measured.
 
 ## Wednesday: the first 20 minutes
 
@@ -34,7 +58,7 @@ make blinky bit LANES=8
 6. **`python3 host.py ping`.** Expect `reply: K 8 15 1` (LANES 8, H 15, protocol 1) and `PASS`. LED 3 flickers when a byte arrives, LED 4 when one is sent.
 7. **`python3 host.py replay --n 20`.** Expect `20/20` on every line and `PASS`. Each decision is checked in full: all 32 costs, all 32 final states, best_idx, best_cost and the clock count.
 
-**Before any later `make prog`/`make flash`: unplug and replug the USB cable.** Once the UART has been used, the board's debugger disables JTAG until it is replugged (Sipeed's FAQ, below). Replugging loses nothing: an SRAM design is gone at power-off anyway.
+**If a later `make prog`/`make flash` fails, unplug and replug the USB cable.** Sipeed's FAQ (below) says the debugger disables JTAG while its UART is used. On October 14, with firmware 2025030317 on macOS, programming after a closed `host.py` session worked without replugging. Replugging loses nothing: an SRAM design is gone at power-off anyway.
 
 If all seven pass, copy the logs that `host.py` printed (`board/build/logs/…`) into `board/results/` and commit them: they are the first hardware evidence. Copy only logs whose first line has no `--fake`: the fake-board runs are in the same folder (named `…_fake_…`) and are not hardware results. `ping` and `replay` need only Python's standard library; `loop` needs NumPy and gymnasium (use the virtualenv's python).
 
@@ -137,7 +161,7 @@ The probes come from flip-flops one clock (37 ns) after the signals they copy, s
 1. **All 4,000 decisions at LANES = 8:** `python3 host.py replay --n 4000` (about 4 minutes: the UART needs 56 ms per decision for its 649 bytes, the engine 0.19 ms). Only the full set has the decisions that saturate ω (20 of them) or clamp a hidden value (32); the first 1,000 have neither ([`results/coverage.log`](../results/coverage.log)).
 2. **20 closed-loop episodes:** `<venv>/bin/python host.py loop --episodes 20`. Every action applied to the simulated pendulum is the one the FPGA picked, and each episode's return must equal `sim/returns.txt` exactly (float `==`). Once this passes, it *is* hardware-in-the-loop: a real FPGA controller, a simulated plant. It isn't real-time: a decision takes at least 56 ms over the UART, longer than Pendulum-v1's 50 ms step, and the simulated pendulum simply waits.
 3. **Measure the busy pulse in PulseView** (8 channels, 24 MHz, sigrok), wired as in the probe table. Trigger on CH0 rising, run `replay`, and measure the high time. **Expected, not measured:** 5,022 clocks × 37.04 ns = **186.0 µs** at LANES = 8, and 1,281 × 37.04 ns = **47.4 µs** at LANES = 32. At 24 MHz the measurement is good to about ±42 ns. `tb_top.v` already checks in simulation that the probe is high for exactly `cycles` clocks. While at it, the UART bits: 234 clocks = 8.67 µs on `probe_tx` (the board's 234-clock bit), 1/115,200 = 8.68 µs on `probe_rx` (the BL616's).
-4. **LANES = 32:** replug the board (JTAG is off after a UART session), `make prog LANES=32` and `replay --n 4000` again; then the second placement seed, `make prog LANES=32 SEED=2` (both bitstreams are built by `make results`). Then `loop --episodes 20` on the one that passes.
+4. **LANES = 32:** (as planned; not done, see Results on hardware: 32 lanes need the DSP blocks, `SYNTH_OPTS=`, which computed wrong on this board.) Replug if programming fails, `make prog LANES=32 SYNTH_OPTS=` and `replay --n 4000` again; then the second placement seed, `make prog LANES=32 SEED=2` (both bitstreams are built by `make results`). Then `loop --episodes 20` on the one that passes.
 5. Save every log in `board/results/` and commit them. Only then does anything here become a hardware result.
 
 ## The toolchain risk, and why the bit-exact check is the answer
@@ -155,7 +179,7 @@ If `replay` reports mismatches:
 
 1. **What fails?** The log names the fields per decision. Only `cycles` wrong: the FSM or its counter. Costs wrong but states right: the cost adders. States wrong: the lane arithmetic. Everything wrong from decision 0: suspect the UART or the bitstream, not arithmetic.
 2. **Is it repeatable?** Run the same `replay` twice. Different decisions failing each time points at timing or the board, not a wrong netlist.
-3. **Another placement:** replug the board (JTAG is off after a UART session), then `make prog SEED=2` (and 3, 4 …). If some seeds pass and others don't, the problem is in place and route or packing.
+3. **Another placement:** replug the board if programming fails, then `make prog SEED=2` (and 3, 4 …). If some seeds pass and others don't, the problem is in place and route or packing.
 4. **No carry chains:** replug, then `make prog SYNTH_OPTS=-noalu` builds every adder and comparator from plain LUTs (the #514 workaround; the LANES = 8 variant is built and fits, see `results/build_l8.txt`). If that passes where the normal build fails, the ALU mapping is the culprit. `SYNTH_OPTS=-nolutram` does the same for the LUT RAM.
 5. Report it upstream with the failing decision numbers, the logs and the bitstream variants.
 

@@ -1,0 +1,6 @@
+# added after the run: bitstream on the board was the default LANES = 8 build (board/build/engine_l8.fs)
+# added after the run: board = Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7), 27 MHz, BL616 debugger firmware 2025030317; host = MacBook (macOS), 115,200 baud
+# added after the run: the final "log:" line's absolute path was shortened to repo-relative
+# board/host.py --port /dev/cu.usbserial-20250303171 ping   (2026-10-14 20:40:26, port /dev/cu.usbserial-20250303171)
+reply: K 8 15 1   (LANES = 8, H = 15, protocol version 1)
+PASS

@@ -1,0 +1,33 @@
+# added after the run: bitstream on the board was the default LANES = 8 build (hardware multipliers ON, carry chains ON): board/build/engine_l8.fs
+# added after the run: board = Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7), 27 MHz, BL616 debugger firmware 2025030317; host = MacBook (macOS), 115,200 baud
+# added after the run: the final "log:" line's absolute path was shortened to repo-relative
+# board/host.py --port /dev/cu.usbserial-20250303171 replay --n 20   (2026-10-14 20:41:05, port /dev/cu.usbserial-20250303171)
+replay: 20 recorded decisions from sim/ -> /dev/cu.usbserial-20250303171 (LANES = 8, H = 15; expect 5022 cycles each)
+decision 0: state (-7, 10) best 15 cost 294071 cycles 5022 MISMATCH best cost state
+decision 1: state (-6, 11) best 4 cost 312482 cycles 5022 MISMATCH best cost state
+decision 2: state (-4, 13) best 18 cost 364673 cycles 5022 MISMATCH best cost state
+decision 3: state (-3, 8) best 17 cost 278266 cycles 5022 MISMATCH best cost state
+decision 4: state (-3, 5) best 21 cost 302484 cycles 5022 MISMATCH best cost state
+decision 5: state (-2, 4) best 13 cost 251434 cycles 5022 MISMATCH best cost state
+decision 6: state (-1, 8) best 26 cost 282204 cycles 5022 MISMATCH best cost state
+decision 7: state (-1, 4) best 6 cost 324212 cycles 5022 MISMATCH best cost state
+decision 8: state (0, 1) best 11 cost 274589 cycles 5022 MISMATCH best cost state
+decision 9: state (0, -1) best 12 cost 349673 cycles 5022 MISMATCH best cost state
+decision 10: state (0, 3) best 30 cost 346218 cycles 5022 MISMATCH best cost state
+decision 11: state (0, 3) best 5 cost 335333 cycles 5022 MISMATCH best cost state
+decision 12: state (1, 2) best 18 cost 310448 cycles 5022 MISMATCH best cost state
+decision 13: state (1, 2) best 3 cost 376676 cycles 5022 MISMATCH best cost state
+decision 14: state (1, -2) best 24 cost 290747 cycles 5022 MISMATCH best cost state
+decision 15: state (0, -1) best 3 cost 298384 cycles 5022 MISMATCH best cost state
+decision 16: state (0, -2) best 29 cost 356989 cycles 5022 MISMATCH best cost state
+decision 17: state (0, -1) best 13 cost 262422 cycles 5022 MISMATCH best cost state
+decision 18: state (1, 4) best 3 cost 244800 cycles 5022 MISMATCH best cost state
+decision 19: state (1, -1) best 5 cost 299153 cycles 5022 MISMATCH best cost state
+decisions answered: 20/20 sent (protocol errors: 0)
+costs: 0/20 answered decisions bit-exact (all 32 candidates)
+final states: 0/20 answered decisions bit-exact (all 32 theta and omega)
+best_idx and best_cost: 0/20 answered decisions match
+cycles = 5022: 20/20 answered decisions
+wall time 1.2 s (60.5 ms per decision sent)
+FAIL
+log: board/build/logs/replay_20261014_204104.log

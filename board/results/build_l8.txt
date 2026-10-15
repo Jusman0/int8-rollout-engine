@@ -6,7 +6,7 @@ Tools: Yosys 0.69+286 (git sha1 37f25dae9, Release, Clang /usr/local/osxcross/ta
        "nextpnr-himbaechel" -- Next Generation Place and Route (Version nextpnr-0.11.1-59-g837d0eed)
        apycula (gowin_pack) 0.35.dev2+g834c9e891
 
-These are the tools' estimates. Nothing here has run on the board yet.
+These are the tools' estimates. These DSP-block builds are not the one that ran on the board (that is the -nodsp build: results/build_nodsp.txt, results/hardware/).
 nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine
 (results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane
 multiplier. The board does not depend on them: it runs at 27 MHz from the 27 MHz oscillator (U3).
@@ -47,7 +47,7 @@ Tools: Yosys 0.69+286 (git sha1 37f25dae9, Release, Clang /usr/local/osxcross/ta
        "nextpnr-himbaechel" -- Next Generation Place and Route (Version nextpnr-0.11.1-59-g837d0eed)
        apycula (gowin_pack) 0.35.dev2+g834c9e891
 
-These are the tools' estimates. Nothing here has run on the board yet.
+These are the tools' estimates. These DSP-block builds are not the one that ran on the board (that is the -nodsp build: results/build_nodsp.txt, results/hardware/).
 nextpnr's Gowin timing numbers look optimistic: the ECP5 build of the same engine
 (results/synth/summary.txt) reached 47-54 MHz, and its critical path was the lane
 multiplier. The board does not depend on them: it runs at 27 MHz from the 27 MHz oscillator (U3).

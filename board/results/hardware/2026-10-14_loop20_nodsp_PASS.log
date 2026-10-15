@@ -1,0 +1,30 @@
+# added after the run: bitstream on the board was the LANES = 8 build with SYNTH_OPTS=-nodsp: board/build/engine_l8_nodsp.fs
+# added after the run: board = Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7), 27 MHz, BL616 debugger firmware 2025030317; host = MacBook (macOS), 115,200 baud
+# added after the run: the final "log:" line's absolute path was shortened to repo-relative
+# board/host.py --port /dev/cu.usbserial-20250303171 loop --episodes 20   (2026-10-14 20:49:19, port /dev/cu.usbserial-20250303171)
+loop: Pendulum-v1, seed 0, H = 15, 20 episode(s); the board (LANES = 8) on /dev/cu.usbserial-20250303171 picks every action
+episode 0: return -1.1752364061018081, golden -1.1752364061018081: MATCH
+episode 1: return -121.96811079924579, golden -121.96811079924579: MATCH
+episode 2: return -1.2176434052019922, golden -1.2176434052019922: MATCH
+episode 3: return -1.187621498555145, golden -1.187621498555145: MATCH
+episode 4: return -125.71269249498259, golden -125.71269249498259: MATCH
+episode 5: return -261.9782961208811, golden -261.9782961208811: MATCH
+episode 6: return -128.48925509269995, golden -128.48925509269995: MATCH
+episode 7: return -256.95368823994494, golden -256.95368823994494: MATCH
+episode 8: return -239.39529085746054, golden -239.39529085746054: MATCH
+episode 9: return -1.2629175482360169, golden -1.2629175482360169: MATCH
+episode 10: return -121.23458077095529, golden -121.23458077095529: MATCH
+episode 11: return -246.6793730854758, golden -246.6793730854758: MATCH
+episode 12: return -127.60224817586045, golden -127.60224817586045: MATCH
+episode 13: return -127.55385569957693, golden -127.55385569957693: MATCH
+episode 14: return -127.60789347451488, golden -127.60789347451488: MATCH
+episode 15: return -128.33903233465995, golden -128.33903233465995: MATCH
+episode 16: return -4.287789328413009, golden -4.287789328413009: MATCH
+episode 17: return -128.41772702614577, golden -128.41772702614577: MATCH
+episode 18: return -243.70390995493094, golden -243.70390995493094: MATCH
+episode 19: return -126.28980447863765, golden -126.28980447863765: MATCH
+decisions made by the board: 4000; every reply field equal to the golden model on the same inputs: 4000/4000
+episode returns identical to sim/returns.txt (float ==): 20/20
+wall time 247.0 s (61.8 ms per decision)
+PASS
+log: board/build/logs/loop_20261014_204918.log

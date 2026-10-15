@@ -2,13 +2,15 @@
 # make -C board <target> from the repo root.
 #
 #   make sim               board testbench (UART bit level), LANES 8 and 32, N decisions each
-#   make bit               engine bitstream: build/engine_l$(LANES).fs   (LANES ?= 8)
-#   make bit LANES=32 SEED=2   another placement seed: build/engine_l32_s2.fs
+#   make bit               engine bitstream: build/engine_l$(LANES)$(VAR).fs, by default
+#                          build/engine_l8_nodsp.fs (LANES ?= 8, SYNTH_OPTS ?= -nodsp, see below)
+#   make bit SYNTH_OPTS=   the DSP-block build, build/engine_l8.fs (computed wrong on the board)
+#   make bit LANES=32 SEED=2 SYNTH_OPTS=   32 lanes need the DSP blocks: build/engine_l32_s2.fs
 #   make bit SYNTH_OPTS=-noalu  adders without carry chains: build/engine_l8_noalu.fs
 #   make blinky            the LED counter: build/blinky.fs
 #   make prog-blinky       load blinky into the FPGA's SRAM (lost at power-off)
-#   make prog              load build/engine_l$(LANES).fs into SRAM
-#   make flash             write build/engine_l$(LANES).fs to the board's flash (kept at power-off)
+#   make prog              load the same bitstream as make bit into SRAM
+#   make flash             write it to the board's flash (kept at power-off)
 #   make host-fake         host.py against a fake board on a pseudo-terminal: ping, replay 50, loop 1
 #   make results           build l8 (seed 1, and -noalu) and l32 (seeds 1, 2); write results/build_l*.txt
 #   make clean             delete build/
@@ -48,11 +50,19 @@ LANES    ?= 8
 SEED     ?= 1
 N        ?= 20
 
-# Extra synth_gowin options, for diagnosing wrong on-chip results (see
-# board/README.md): -noalu builds adders from LUTs instead of carry chains,
-# -nolutram builds memories from flip-flops instead of LUT RAM. They become
-# part of the file names (-noalu -> _noalu), so variants never mix.
-SYNTH_OPTS ?=
+# Extra synth_gowin options (see board/README.md): -nodsp builds the
+# multipliers from LUTs instead of the chip's DSP blocks, -noalu builds adders
+# from LUTs instead of carry chains, -nolutram builds memories from flip-flops
+# instead of LUT RAM. They become part of the file names (-nodsp -> _nodsp),
+# so variants never mix.
+#
+# The default is -nodsp because that is the build that computes correctly on
+# the board: on 2026-10-14 the plain build (DSP blocks) gave the right clock
+# count but wrong costs and states on every decision, -noalu (DSP blocks still
+# on) failed the same way, and -nodsp was bit-exact on all 4,000 recorded
+# decisions (board/results/hardware/). Pass SYNTH_OPTS= to build with the DSP
+# blocks again.
+SYNTH_OPTS ?= -nodsp
 
 ROOT  := $(abspath $(CURDIR)/..)
 BUILD := $(ROOT)/board/build
@@ -153,10 +163,10 @@ host-fake: | $(BUILD)
 # LANES 8 (seed 1, and the -noalu variant: the fallback if carry chains
 # misbehave on the chip), LANES 32 (seeds 1 and 2), and blinky.
 results:
-	$(MAKE) bit LANES=8 SEED=1
+	$(MAKE) bit LANES=8 SEED=1 SYNTH_OPTS=
 	$(MAKE) bit LANES=8 SEED=1 SYNTH_OPTS=-noalu
-	$(MAKE) bit LANES=32 SEED=1
-	$(MAKE) bit LANES=32 SEED=2
+	$(MAKE) bit LANES=32 SEED=1 SYNTH_OPTS=
+	$(MAKE) bit LANES=32 SEED=2 SYNTH_OPTS=
 	$(MAKE) blinky
 	mkdir -p results
 	{ OSS=$(OSS) bash report.sh 8 1; echo; echo "--------"; echo; \

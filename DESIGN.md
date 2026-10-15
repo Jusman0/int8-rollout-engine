@@ -162,8 +162,9 @@ dbg_n[4:0] → dbg_cost[23:0], dbg_theta[7:0], dbg_omega[7:0]   readback for ver
 ## 8. Claims policy
 
 The README states only measured results, each with the command that reproduces it. It never says: world action
-model, DreamZero on hardware, hardware-in-the-loop, runs on an FPGA, real-time robot, or faster than a GPU/Jetson.
-It also never gives an MHz/µs figure without committed synthesis logs, and it says "post-route estimate,
+model, DreamZero on hardware, real-time robot, or faster than a GPU/Jetson. It says "runs on an FPGA" and
+"hardware-in-the-loop" only for what `board/results/hardware/` logs (since 2026-10-14: the 8-lane `-nodsp` build
+on a Tang Nano 20K, at 27 MHz). It also never gives an MHz/µs figure without committed synthesis logs, and it says "post-route estimate,
 out-of-context" for any that are given.
 
 *Built with an AI pair programmer. The design decisions and their reasons are documented here so they can be checked
@@ -362,3 +363,16 @@ and explained.*
   - **Vectors made on the PC differ from the Mac's:** the PC's closed-loop episodes come out slightly different (the
     cause was not pinned down), so its `sim/` holds a different set of decisions. On the PC, `golden.int_rollout`
     reproduces every expected value in the Mac's files, and the GPU passes both sets.
+
+### Stage 7: on a real FPGA (2026-10-14)
+
+- **Board:** Sipeed Tang Nano 20K (GW2AR-LV18QN88C8/I7), 27 MHz oscillator, no PLL, wrapped by `board/top.v` (UART
+  protocol in `board/README.md`); open-source flow Yosys 0.69+286 `synth_gowin`, nextpnr-himbaechel 0.11.1-59,
+  apicula `gowin_pack`, openFPGALoader 1.1.1. The engine RTL is unchanged.
+- **Deviation: the board build makes the multipliers from LUTs (`synth_gowin -nodsp`), now the board Makefile's
+  default.** With the GW2A's DSP blocks in use the chip returned the right clock count (5,022) and wrong costs and
+  states on every decision; `-noalu` (carry chains off, DSP on) failed the same way; `-nodsp` was bit-exact. With
+  this flow and this design, the DSP-block builds compute wrong while the same RTL without DSP blocks is bit-exact,
+  as are RTL simulation and the CUDA port; which stage of the flow is at fault is not isolated yet. A simple signedness error does not explain the wrong values (`board/diag/emulate_multiplier.py`).
+- **Results:** 4,000/4,000 recorded decisions bit-exact and 20/20 closed-loop episodes identical to the golden model
+  (`board/results/hardware/`). LANES = 8 only; a LANES = 16 `-nodsp` build fits (91% of LUT4s) but has not run.

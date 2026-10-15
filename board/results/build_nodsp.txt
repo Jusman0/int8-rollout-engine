@@ -1,0 +1,36 @@
+# Tang Nano 20K builds WITHOUT DSP blocks (synth_gowin -nodsp), from the nextpnr-himbaechel logs
+# made by:  make bit LANES=8   and   make bit LANES=16   (SYNTH_OPTS defaults to -nodsp), 2026-10-14
+# tools: Yosys 0.69+286, nextpnr-himbaechel 0.11.1-59, apicula gowin_pack (OSS CAD Suite 2026-10-13)
+# raw nextpnr lines only: report.sh's "LUT positions (LUT4 + ALU)" sum is not used here, because with
+# -nodsp it overcounts (LUT4 + ALU would exceed the chip for LANES = 16, which placed and routed).
+# Fmax is nextpnr's post-route estimate at the 27 MHz target; the board ran the LANES = 8 build at 27 MHz.
+
+== LANES = 8, -nodsp, seed 1 (build/pnr_l8_nodsp_s1.log)  [ran on the board: results/hardware/]
+	                 IOB:      14/    384     3%
+	                LUT4:   12016/  20736    57%
+	                 ALU:    1694/  15552    10%
+	                 DFF:    3913/  15552    25%
+	           RAM16SDP4:     272/    648    41%
+	               BSRAM:       0/     46     0%
+	     MULTADDALU18X18:       0/     24     0%
+	        MULTALU18X18:       0/     24     0%
+	        MULTALU36X18:       0/     24     0%
+	           MULT36X36:       0/     12     0%
+	           MULT18X18:       0/     48     0%
+	             MULT9X9:       0/     96     0%
+Max frequency for clock 'u_busy_led.clk': 65.76 MHz (PASS at 27.00 MHz)
+
+== LANES = 16, -nodsp, seed 1 (build/pnr_l16_nodsp_s1.log)  [not run on the board]
+	                 IOB:      14/    384     3%
+	                LUT4:   18915/  20736    91%
+	                 ALU:    3134/  15552    20%
+	                 DFF:    4584/  15552    29%
+	           RAM16SDP4:     288/    648    44%
+	               BSRAM:       0/     46     0%
+	     MULTADDALU18X18:       0/     24     0%
+	        MULTALU18X18:       0/     24     0%
+	        MULTALU36X18:       0/     24     0%
+	           MULT36X36:       0/     12     0%
+	           MULT18X18:       0/     48     0%
+	             MULT9X9:       0/     96     0%
+Max frequency for clock 'u_busy_led.clk': 62.77 MHz (PASS at 27.00 MHz)
