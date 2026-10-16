@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 board/build/
 .cupy_cache/
+# logic-analyzer captures are small and are evidence: keep them
+!board/results/hardware/*.vcd

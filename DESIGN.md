@@ -376,3 +376,5 @@ and explained.*
   as are RTL simulation and the CUDA port; which stage of the flow is at fault is not isolated yet. A simple signedness error does not explain the wrong values (`board/diag/emulate_multiplier.py`).
 - **Results:** 4,000/4,000 recorded decisions bit-exact and 20/20 closed-loop episodes identical to the golden model
   (`board/results/hardware/`). LANES = 8 only; a LANES = 16 `-nodsp` build fits (91% of LUT4s) but has not run.
+- **Measured:** with a logic analyzer on the busy pin, one decision takes 186.000 µs on the chip, exactly 5,022
+  clocks at 27 MHz, matching the RTL's cycle count (`board/results/hardware/2026-10-15_busy_pulse.txt`).

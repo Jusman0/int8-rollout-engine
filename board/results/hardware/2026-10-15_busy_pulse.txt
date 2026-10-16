@@ -1,0 +1,10 @@
+# Logic-analyzer measurement of the engine on the chip, 2026-10-15
+# board: Tang Nano 20K running board/build/engine_l8_nodsp.fs (LANES = 8, -nodsp), 27 MHz
+# analyzer: 8-channel 24 MHz FX2-based (sigrok driver fx2lafw), D0 on FPGA pin 73 (busy), D1 on pin 74 (done);
+#   no GND wire: board and analyzer share ground through the Mac's USB ports
+# capture: sigrok-cli -d fx2lafw --config samplerate=24M --channels D0,D1 --triggers D0=r --wait-trigger \
+#            --samples 12M -O vcd -o busy.vcd   (sigrok-cli 0.7.2 / libsigrok 0.5.2 from Homebrew)
+#   while host.py replay --n 20 ran (20/20 bit-exact: board/build/logs/replay_20261015_175324.log)
+# also read by eye in GTKWave: one pulse from 58.069 ms to 58.255 ms, delta +186,000,000 ps
+# this file: python3 board/diag/pulse_widths.py board/results/hardware/2026-10-15_busy_pulse.vcd
+# resolution: one 24 MHz sample = 41.7 ns (about 1.1 clocks of the 27 MHz engine)
