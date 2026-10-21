@@ -78,7 +78,7 @@ The three misses aren't harmless bugs. The first 300 decisions never saturate ω
 
 ### Synthesis
 
-From [`results/synth/`](results/synth/) (`make timing YOSYS=... NEXTPNR=...`; Yosys 0.69, nextpnr-ecp5 0.11.1, LFE5U-45F). All MHz and µs figures are **post-route estimates, out-of-context** (no pin constraints), from the median of 3 placement seeds. Nothing has been run on a board. Since these runs the RTL has only gained comments and simulation-only checks, and Yosys still builds the identical netlist ([`netlist_check.txt`](results/synth/netlist_check.txt)).
+From [`results/synth/`](results/synth/) (`make timing YOSYS=... NEXTPNR=...`; Yosys 0.69, nextpnr-ecp5 0.11.1, LFE5U-45F). All MHz and µs figures are **post-route estimates, out-of-context** (no pin constraints), from the median of 3 placement seeds. These ECP5 figures are estimates; the board results are a separate 8-lane build on a Tang Nano 20K ([`board/`](board/)). Since these runs the RTL has only gained comments and simulation-only checks, and Yosys still builds the identical netlist ([`netlist_check.txt`](results/synth/netlist_check.txt)).
 
 | | 32 lanes | 8 lanes |
 |---|---|---|

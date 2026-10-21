@@ -15,8 +15,8 @@ For sampling-based model-predictive control, this project's method, the hardware
 **candidates × imagined steps × one forward pass**, and the imagined steps are *sequential*: step t+1 needs the
 state from step t. (DreamZero's cost has the same sequential shape without the candidates: denoising steps × one
 forward pass.) This project measures that cost on a toy you can hold in your head: a 2-number state
-(angle, angular velocity), a 3→16→2 network, 32 candidates, 15 steps. It is **not** a world action model and does not run
-on an FPGA; it is RTL verified in simulation, with synthesis estimates.
+(angle, angular velocity), a 3→16→2 network, 32 candidates, 15 steps. It is **not** a world action model. It is RTL verified in
+simulation; an 8-lane build also runs bit-exact on a Tang Nano 20K FPGA (Stage 7).
 
 ## 1. The task: gymnasium `Pendulum-v1`
 
@@ -255,8 +255,8 @@ and explained.*
     4,000 in `sim/`: all 71 that clamp an h, saturate ω or tie, then the earliest others. The lines are copied
     unchanged, so the expected values are still `golden.py`'s. The first-300 results stay in the log to show why.
   - **Pass rule:** the original RTL must PASS on both sets and every mutant must FAIL on the corner set. The
-    command is `PYTHON=$(PYTHON) bash mutants/run_mutants.sh`; the `make mutants` target is for the integrator to
-    add.
+    command is `PYTHON=$(PYTHON) bash mutants/run_mutants.sh`; `make mutants` runs the
+    same command.
 - **Stage 3, cycle sweep.** No rule in §1–§6 was changed. `perf/sweep.sh` runs the unchanged
   testbench (`make test LANES=… VEC=… N=200`) for LANES ∈ {32, 16, 8} × H ∈ {15, 5}, on 200 decisions per
   configuration (episode 0, seed 0) made by `golden.py --count 200 --out sim/perf/h15` and `--H 5 … sim/perf/h5`.
@@ -277,7 +277,7 @@ and explained.*
 - **Stage 4, integration and documentation.** No rule in §1–§7 was changed; `rtl/`, `tb/` and `model/`
   were not touched.
   - **Makefile:** targets `cosim`, `mutants`, `sweep`, `synth` and `timing` run each stage's script with the command
-    that stage used (the sweep agent proposed the name `perf`; it is `sweep` here). `YOSYS` and `NEXTPNR` pick the
+    that stage used. `YOSYS` and `NEXTPNR` pick the
     tool names. `cosim`, `mutants` and `sweep` depend on `rom/params.vh`, so the ROM matches the model that the
     Python side folds. Each target was run once at commit c188ae0 and reproduced its committed log: the same 20
     co-simulation returns, the same mutant table, the same sweep counts (`results/cycles.log` byte-identical), the
